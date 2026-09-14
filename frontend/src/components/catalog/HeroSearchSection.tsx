@@ -8,8 +8,8 @@ import { CategoryIcon } from "./CategoryIcon";
 export interface HeroStats {
   total: number;
   active: number;
-  launches: number;
-  topApp: string;
+  favorites: number;
+  categories: number;
 }
 
 interface HeroSearchSectionProps {
@@ -126,18 +126,18 @@ export function HeroSearchSection({
             </div>
             <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3">
               <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
-                Monthly Launches
+                Favorited
               </dt>
-              <dd data-testid="stat-launches" className="mt-1 font-heading text-xl font-semibold text-white">
-                {formatCount(stats.launches)}
+              <dd data-testid="stat-favorites" className="mt-1 font-heading text-xl font-semibold text-white">
+                {formatCount(stats.favorites)}
               </dd>
             </div>
             <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3">
               <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
-                Most Popular
+                Categories
               </dt>
-              <dd data-testid="stat-top-app" className="mt-1 truncate font-heading text-base font-semibold text-white">
-                {stats.topApp}
+              <dd data-testid="stat-categories-count" className="mt-1 font-heading text-xl font-semibold text-white">
+                {stats.categories}
               </dd>
             </div>
           </dl>

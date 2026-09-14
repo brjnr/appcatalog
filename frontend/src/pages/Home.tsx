@@ -6,6 +6,7 @@ import { Plus, SearchX, ServerCrash } from "lucide-react";
 import { apiErrorMessage, apiGet, apiPost } from "@/lib/api";
 import { useFavorites, usePersistedState } from "@/lib/prefs";
 import type {
+  Note,
   AppCategory,
   CardActions,
   CatalogApp,
@@ -23,9 +24,10 @@ import { AlphabeticalView } from "@/components/catalog/AlphabeticalView";
 import { CategoryView } from "@/components/catalog/CategoryView";
 import { AppFormDialog } from "@/components/catalog/AppFormDialog";
 import { InfraSearchResults } from "@/components/catalog/InfraSearchResults";
+import { NoteDetailDialog } from "@/components/catalog/NoteDetailDialog";
 import { ServerDrawer } from "@/components/catalog/ServerDrawer";
 import { PicDrawer } from "@/components/catalog/PicDrawer";
-import { InfraNavProvider } from "@/lib/infraNav";
+import { InfraNavProvider, useInfraNav } from "@/lib/infraNav";
 import { Button } from "@/components/ui/button";
 
 // Infra search results and their drawers read ?server= / ?pic= from the URL.
@@ -70,6 +72,8 @@ function Home() {
   const [layout, setLayout] = usePersistedState<LayoutId>("catalog.layout", "grid");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [noteDetail, setNoteDetail] = useState<Note | null>(null);
+  const { openServer, openPic } = useInfraNav();
   const { favorites, toggle: toggleFavoriteLocal } = useFavorites();
 
   const launch = useMutation({
@@ -122,9 +126,6 @@ function Home() {
       case "name_desc":
         sorted.sort((a, b) => b.name.localeCompare(a.name));
         break;
-      case "most_used":
-        sorted.sort((a, b) => b.usage_count - a.usage_count || a.name.localeCompare(b.name));
-        break;
       case "most_favorite":
         sorted.sort((a, b) => b.favorite_count - a.favorite_count || a.name.localeCompare(b.name));
         break;
@@ -142,12 +143,11 @@ function Home() {
 
   const stats = useMemo<HeroStats | null>(() => {
     if (!apps) return null;
-    const top = [...apps].sort((a, b) => b.usage_count - a.usage_count)[0];
     return {
       total: apps.length,
       active: apps.filter((app) => app.status === "Active").length,
-      launches: apps.reduce((sum, app) => sum + app.usage_count, 0),
-      topApp: top?.name ?? "—",
+      favorites: apps.reduce((sum, app) => sum + app.favorite_count, 0),
+      categories: new Set(apps.map((app) => app.category_id)).size,
     };
   }, [apps]);
 
@@ -207,7 +207,7 @@ function Home() {
           onClearFilters={clearFilters}
         />
 
-        <InfraSearchResults search={search} />
+        <InfraSearchResults search={search} onOpenNote={setNoteDetail} />
 
         {isLoading ? (
           <div
@@ -290,6 +290,21 @@ function Home() {
       </main>
 
       <AppFormDialog open={formOpen} onOpenChange={setFormOpen} initial={null} />
+      <NoteDetailDialog
+        note={noteDetail}
+        onOpenChange={(open) => !open && setNoteDetail(null)}
+        onEdit={() => navigate("/notes")}
+        onTogglePin={() => navigate("/notes")}
+        onDelete={() => navigate("/notes")}
+        onOpenServer={(id) => {
+          setNoteDetail(null);
+          openServer(id);
+        }}
+        onOpenPic={(id) => {
+          setNoteDetail(null);
+          openPic(id);
+        }}
+      />
       <ServerDrawer />
       <PicDrawer />
     </div>

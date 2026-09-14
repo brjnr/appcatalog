@@ -78,7 +78,7 @@ function AppDetail() {
     if (!app || !allApps) return [];
     return allApps
       .filter((candidate) => candidate.category_id === app.category_id && candidate.id !== app.id)
-      .sort((a, b) => b.usage_count - a.usage_count)
+      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 4);
   }, [app, allApps]);
 
@@ -319,14 +319,6 @@ function AppDetail() {
 
                   <dl className="mt-5 grid grid-cols-2 gap-x-3 gap-y-3 border-t pt-4 text-sm">
                     <div>
-                      <dt className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <MousePointerClick className="h-3 w-3" aria-hidden="true" /> Launches
-                      </dt>
-                      <dd data-testid="detail-usage-count" className="font-semibold text-foreground">
-                        {formatCount(app.usage_count)}
-                      </dd>
-                    </div>
-                    <div>
                       <dt className="text-xs text-muted-foreground">Favorites</dt>
                       <dd data-testid="detail-favorite-count" className="font-semibold text-foreground">
                         {formatCount(app.favorite_count)}
@@ -383,9 +375,6 @@ function AppDetail() {
                           />
                           <span className="min-w-0 flex-1 truncate text-foreground">
                             {candidate.name}
-                          </span>
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {formatCount(candidate.usage_count)}
                           </span>
                         </Link>
                       ))}

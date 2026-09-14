@@ -33,6 +33,32 @@ class StandbyEntryOut(StandbyEntry):
     application_name: str = ""
 
 
+class ServerTicket(BaseModel):
+    """A Jira ticket ever raised against this server, and who executed it."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    jira_id: str = Field(min_length=1, max_length=40)  # e.g. INFRA-1042
+    url: str = Field(default="", max_length=500)
+    summary: str = Field(default="", max_length=300)
+    executed_by: str = Field(default="", max_length=120)
+    status: str = Field(default="Open", max_length=40)
+    requested_on: str = Field(default="", pattern=r"^(\d{4}-\d{2}-\d{2})?$")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ServerTicketInput(BaseModel):
+    jira_id: str = Field(min_length=1, max_length=40)
+    url: str = Field(default="", max_length=500)
+    summary: str = Field(default="", max_length=300)
+    executed_by: str = Field(default="", max_length=120)
+    status: str = Field(default="Open", max_length=40)
+    requested_on: str = Field(default="", pattern=r"^(\d{4}-\d{2}-\d{2})?$")
+
+
+TICKET_STATUSES = ["Open", "In Progress", "Done", "Cancelled"]
+
+
 # --------------------------------------------------------------------------- servers
 
 
@@ -57,6 +83,7 @@ class Server(BaseModel):
     description: str = ""
     application_ids: list[str] = Field(default_factory=list)
     pic_ids: list[str] = Field(default_factory=list)
+    tickets: list[ServerTicket] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

@@ -62,7 +62,6 @@ export type LayoutId = "grid" | "list" | "alphabetical" | "category" | "compact"
 export type SortId =
   | "name_asc"
   | "name_desc"
-  | "most_used"
   | "most_favorite"
   | "recently_added"
   | "recently_updated";
@@ -70,7 +69,6 @@ export type SortId =
 export const SORT_OPTIONS: { id: SortId; label: string }[] = [
   { id: "name_asc", label: "Name: A → Z" },
   { id: "name_desc", label: "Name: Z → A" },
-  { id: "most_used", label: "Most Used" },
   { id: "most_favorite", label: "Most Favorite" },
   { id: "recently_added", label: "Recently Added" },
   { id: "recently_updated", label: "Recently Updated" },
@@ -122,6 +120,21 @@ export interface StandbyEntryOut extends StandbyEntry {
   application_name: string;
 }
 
+/** Jira ticket ever raised against a server. */
+export interface ServerTicket {
+  id: string;
+  jira_id: string;
+  url: string;
+  summary: string;
+  executed_by: string;
+  status: string;
+  requested_on: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const TICKET_STATUSES = ["Open", "In Progress", "Done", "Cancelled"] as const;
+
 export interface Server {
   id: string;
   name: string;
@@ -143,6 +156,7 @@ export interface Server {
   description: string;
   application_ids: string[];
   pic_ids: string[];
+  tickets: ServerTicket[];
   created_at: string;
   updated_at: string;
   applications: RefSummary[];
@@ -245,8 +259,8 @@ export interface Note {
   body: string;
   author_id: string;
   author_name: string;
-  department_id: string;
-  department_name: string;
+  department_ids: string[];
+  department_names: string[];
   pinned: boolean;
   note_date: string;
   expires_at: string;
@@ -294,6 +308,28 @@ export interface StandbyRotateResult {
   skipped: number;
   entries: StandbyCalendarEntry[];
 }
+
+/** Ready-made memo formats. */
+export const NOTE_TEMPLATES: { id: string; label: string; title: string; body: string }[] = [
+  {
+    id: "incident",
+    label: "Incident",
+    title: "Incident \u2014 ",
+    body: "Impact:\nStarted:\nDetected by:\nCurrent status:\nWorkaround:\nNext update:",
+  },
+  {
+    id: "patching",
+    label: "Patching",
+    title: "Patching \u2014 ",
+    body: "Target:\nPatch/version:\nWindow:\nReboot required:\nRollback plan:\nVerification:",
+  },
+  {
+    id: "maintenance",
+    label: "Maintenance window",
+    title: "Maintenance window \u2014 ",
+    body: "Systems affected:\nWindow:\nExpected downtime:\nExecuted by:\nChange/Jira ticket:\nCommunication sent:",
+  },
+];
 
 export const NOTE_LINK_KINDS: { id: NoteLinkKind; label: string }[] = [
   { id: "application", label: "Application" },

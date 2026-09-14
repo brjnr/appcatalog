@@ -50,9 +50,6 @@ export function AppCardList({
       </Badge>
       <EnvironmentBadge environment={app.environment} className="hidden shrink-0 lg:inline-flex" />
       <StatusBadge status={app.status} className="hidden shrink-0 sm:inline-flex" />
-      <span className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground lg:block">
-        {formatCount(app.usage_count)} launches
-      </span>
 
       <button
         type="button"

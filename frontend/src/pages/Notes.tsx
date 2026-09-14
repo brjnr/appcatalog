@@ -274,7 +274,9 @@ function Notes() {
                     className="inline-flex items-center gap-1"
                   >
                     <Users className="h-3 w-3" aria-hidden="true" />
-                    {note.department_name || "Everyone"}
+                    {note.department_names.length > 0
+                      ? note.department_names.join(", ")
+                      : "Everyone"}
                   </span>
                   <span className="font-mono">noted {note.note_date}</span>
                   {note.status === "trashed" ? (

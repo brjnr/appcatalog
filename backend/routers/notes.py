@@ -72,11 +72,12 @@ async def _resolve_links(docs: list[dict]) -> dict[tuple[str, str], str]:
 
 
 def _can_edit(doc: dict, user: dict) -> bool:
-    """Author, anyone in the same department the note was shared with, or an administrator."""
+    """Author, anyone in a department the note was shared with, or an administrator."""
     if user["role"] == "administrator" or doc.get("author_id") == user["id"]:
         return True
-    department_id = doc.get("department_id") or ""
-    return bool(department_id) and department_id == (user.get("department_id") or "")
+    shared = doc.get("department_ids") or []
+    mine = user.get("department_id") or ""
+    return bool(mine) and mine in shared
 
 
 def _visibility_filter(user: dict) -> dict:
@@ -86,9 +87,9 @@ def _visibility_filter(user: dict) -> dict:
         return {}
     return {
         "$or": [
-            {"department_id": ""},
-            {"department_id": {"$exists": False}},
-            {"department_id": user.get("department_id") or "__none__"},
+            {"department_ids": {"$size": 0}},
+            {"department_ids": {"$exists": False}},
+            {"department_ids": user.get("department_id") or "__none__"},
             {"author_id": user["id"]},
         ]
     }
@@ -117,7 +118,10 @@ def _to_out(
             if trashed_at
             else None
         ),
-        department_name=(department_names or {}).get(base.department_id, ""),
+        department_names=[
+            (department_names or {}).get(department_id, "(removed)")
+            for department_id in base.department_ids
+        ],
         can_edit=_can_edit(doc, user),
     )
 
@@ -135,11 +139,13 @@ async def _department_names() -> dict[str, str]:
     return {d["id"]: d["name"] for d in docs}
 
 
-async def _validate_department(department_id: str | None) -> None:
-    if not department_id:
+async def _validate_departments(department_ids: list[str] | None) -> None:
+    if not department_ids:
         return
-    if not await db.departments.find_one({"id": department_id}, {"id": 1}):
-        raise HTTPException(status_code=422, detail="department does not exist")
+    unique = list(set(department_ids))
+    found = await db.departments.count_documents({"id": {"$in": unique}})
+    if found != len(unique):
+        raise HTTPException(status_code=422, detail="one or more departments do not exist")
 
 
 async def _load_editable(note_id: str, user: dict) -> dict:
@@ -182,7 +188,7 @@ async def list_notes(
         _visibility_filter(user),
     ]
     if department_id:
-        conditions.append({"department_id": department_id})
+        conditions.append({"department_ids": department_id})
     if q and q.strip():
         rx = {"$regex": re.escape(q.strip()), "$options": "i"}
         conditions.append({"$or": [{"title": rx}, {"body": rx}, {"author_name": rx}]})
@@ -252,7 +258,7 @@ async def note_alerts(within_days: int = 2, user: dict = Depends(require_user)):
 @router.post("/notes", response_model=NoteOut, status_code=201)
 async def create_note(input: NoteCreate, user: dict = Depends(require_user)):
     await _validate_links(input.links)
-    await _validate_department(input.department_id)
+    await _validate_departments(input.department_ids)
     today = today_iso()
     note_date = input.note_date or today
     expires_at = input.expires_at or _date_add(note_date, DEFAULT_VALID_DAYS)
@@ -264,7 +270,7 @@ async def create_note(input: NoteCreate, user: dict = Depends(require_user)):
         body=input.body,
         author_id=user["id"],
         author_name=user["name"],
-        department_id=input.department_id,
+        department_ids=input.department_ids,
         pinned=input.pinned,
         note_date=note_date,
         expires_at=expires_at,
@@ -283,8 +289,8 @@ async def update_note(note_id: str, input: NoteUpdate, user: dict = Depends(requ
         raise HTTPException(status_code=400, detail="no fields to update")
     if input.links is not None:
         await _validate_links(input.links)
-    if input.department_id is not None:
-        await _validate_department(input.department_id)
+    if input.department_ids is not None:
+        await _validate_departments(input.department_ids)
 
     note_date = changes.get("note_date") or doc["note_date"]
     expires_at = changes.get("expires_at") or doc["expires_at"]

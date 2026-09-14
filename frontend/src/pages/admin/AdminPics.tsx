@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Eye, Pencil, Plus, Power, Search, Trash2 } from "lucide-react";
+import { ArrowUpDown, Eye, Pencil, Plus, Power, Search, Trash2 } from "lucide-react";
 import { apiDelete, apiErrorMessage, apiGet, apiPut } from "@/lib/api";
 import { InfraNavProvider, useInfraNav } from "@/lib/infraNav";
 import { slugify, type Pic } from "@/lib/types";
@@ -10,10 +10,12 @@ import { PicFormDialog } from "@/components/catalog/PicFormDialog";
 import { ServerDrawer } from "@/components/catalog/ServerDrawer";
 import { PicDrawer } from "@/components/catalog/PicDrawer";
 import { ConfirmDeleteDialog } from "@/components/catalog/ConfirmDeleteDialog";
+import { SearchSelect } from "@/components/catalog/SearchSelect";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 export default function AdminPicsPage() {
   return (
@@ -31,6 +33,10 @@ function AdminPics() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Pic | null>(null);
   const [deleting, setDeleting] = useState<Pic | null>(null);
+  const [deptFilter, setDeptFilter] = useState("");
+  const [posFilter, setPosFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: "name", dir: 1 });
 
   const { data: pics, isLoading } = useQuery({
     queryKey: ["pics"],
@@ -58,13 +64,75 @@ function AdminPics() {
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
 
-  const filtered = (pics ?? []).filter((pic) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return `${pic.name} ${pic.initials} ${pic.email} ${pic.employee_id} ${pic.department}`
-      .toLowerCase()
-      .includes(q);
-  });
+  const filtered = (pics ?? [])
+    .filter((pic) => {
+      const q = search.trim().toLowerCase();
+      if (deptFilter && pic.department_id !== deptFilter) return false;
+      if (posFilter && pic.position !== posFilter) return false;
+      if (statusFilter && pic.status !== statusFilter) return false;
+      if (!q) return true;
+      return `${pic.name} ${pic.initials} ${pic.email} ${pic.employee_id} ${pic.department} ${pic.position}`
+        .toLowerCase()
+        .includes(q);
+    })
+    .sort((a, b) => {
+      const pick = (pic: Pic): string => {
+        switch (sort.key) {
+          case "initials":
+            return pic.initials;
+          case "employee":
+            return pic.employee_id;
+          case "department":
+            return pic.department;
+          case "position":
+            return pic.position;
+          case "email":
+            return pic.email;
+          case "apps":
+            return String(pic.applications.length).padStart(4, "0");
+          case "servers":
+            return String(pic.servers.length).padStart(4, "0");
+          case "standby":
+            return String(pic.standby_schedule.length).padStart(4, "0");
+          case "status":
+            return pic.status;
+          default:
+            return pic.name;
+        }
+      };
+      return pick(a).localeCompare(pick(b)) * sort.dir || a.name.localeCompare(b.name);
+    });
+
+  const uniq = (values: string[]) => [...new Set(values.filter(Boolean))].sort();
+  const departmentOptions = [
+    ...new Map(
+      (pics ?? [])
+        .filter((pic) => pic.department_id)
+        .map((pic) => [pic.department_id, pic.department]),
+    ).entries(),
+  ].sort((a, b) => a[1].localeCompare(b[1]));
+  const positionOptions = uniq((pics ?? []).map((pic) => pic.position));
+  const statusOptions = uniq((pics ?? []).map((pic) => pic.status));
+
+  const toggleSort = (key: string) =>
+    setSort((prev) => ({ key, dir: prev.key === key && prev.dir === 1 ? -1 : 1 }));
+
+  const SortHead = ({ id, label }: { id: string; label: string }) => (
+    <TableHead>
+      <button
+        type="button"
+        data-testid={`pic-sort-${id}`}
+        onClick={() => toggleSort(id)}
+        className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
+      >
+        {label}
+        <ArrowUpDown
+          className={cn("h-3 w-3", sort.key === id ? "text-sky-600 dark:text-sky-300" : "opacity-40")}
+          aria-hidden="true"
+        />
+      </button>
+    </TableHead>
+  );
 
   return (
     <div data-testid="pics-page" className="pb-10">
@@ -105,29 +173,61 @@ function AdminPics() {
         </div>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-xl border bg-card" data-testid="pics-table">
+      <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="pic-column-filters">
+        <SearchSelect
+          testid="pic-department-filter"
+          value={deptFilter}
+          onChange={setDeptFilter}
+          allLabel="Any department"
+          placeholder="Search departments…"
+          options={departmentOptions.map(([id, name]) => ({ id, label: name }))}
+        />
+        <SearchSelect
+          testid="pic-position-filter"
+          value={posFilter}
+          onChange={setPosFilter}
+          allLabel="Any position"
+          placeholder="Search positions…"
+          options={positionOptions.map((value) => ({ id: value, label: value }))}
+        />
+        <SearchSelect
+          testid="pic-status-filter"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          allLabel="Any status"
+          placeholder="Search status…"
+          options={statusOptions.map((value) => ({ id: value, label: value }))}
+        />
+        <span className="text-xs text-muted-foreground" data-testid="pic-result-count">
+          {filtered.length} of {pics?.length ?? 0} shown
+        </span>
+      </div>
+
+      <div className="mt-3 overflow-x-auto rounded-xl border bg-card" data-testid="pics-table">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>PIC</TableHead>
-              <TableHead>Department / Position</TableHead>
-              <TableHead>Applications</TableHead>
-              <TableHead>Servers</TableHead>
-              <TableHead>Standby</TableHead>
-              <TableHead>Status</TableHead>
+              <SortHead id="name" label="PIC" />
+              <SortHead id="department" label="Department" />
+              <SortHead id="position" label="Position" />
+              <SortHead id="email" label="Contact" />
+              <SortHead id="apps" label="Applications" />
+              <SortHead id="servers" label="Servers" />
+              <SortHead id="standby" label="Standby" />
+              <SortHead id="status" label="Status" />
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                   Loading PICs…
                 </TableCell>
               </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                   No PICs match.
                 </TableCell>
               </TableRow>
@@ -156,9 +256,13 @@ function AdminPics() {
                         </span>
                       </button>
                     </TableCell>
-                    <TableCell>
-                      <div className="text-sm text-foreground">{pic.department || "—"}</div>
-                      <div className="text-xs text-muted-foreground">{pic.position || "—"}</div>
+                    <TableCell data-testid={`pic-department-${slug}`} className="text-sm">
+                      {pic.department || "—"}
+                    </TableCell>
+                    <TableCell className="text-sm">{pic.position || "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      <span className="block">{pic.email || "—"}</span>
+                      <span className="block">{pic.phone || "—"}</span>
                     </TableCell>
                     <TableCell>
                       <div className="flex max-w-48 flex-wrap gap-1">

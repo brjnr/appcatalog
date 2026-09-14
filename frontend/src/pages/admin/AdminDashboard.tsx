@@ -90,7 +90,7 @@ export default function AdminDashboard() {
             {appsLoading ? "—" : (apps?.length ?? 0)}
           </p>
           <p className="text-xs text-muted-foreground">
-            {formatCount((apps ?? []).reduce((sum, app) => sum + app.usage_count, 0))} total launches
+            across {activeCategories.length} active categories
           </p>
         </Card>
         <Card className="p-5" data-testid="stat-assignments-card">

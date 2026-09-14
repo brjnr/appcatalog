@@ -149,8 +149,9 @@ application and no PIC to exercise standalone registration. Credentials in
   (403 otherwise). `GET /api/notes?view=active|trash&q=` runs the sweep first: expired notes →
   Trash, Trash older than 7 days → purged. `POST /notes/{id}/restore` pulls one back (pushing a
   lapsed retention date forward); `DELETE /notes/{id}[?permanent=true]` trashes then purges.
-- **Sharing/editing by department**: `Note.department_id` — "" = everyone, otherwise only that
-  department + admins can see it, and the author, that department's members, **and admins** can edit
+- **Sharing/editing by department(s)**: `Note.department_ids[]` — empty = everyone, otherwise only
+  those departments + admins can see it; the author, any member of those departments, **and admins**
+  can edit (`NoteOut.department_names[]` resolved for display)
   (`_can_edit` / `_visibility_filter` in routers/notes.py). Users carry `department_id`
   (`UserOut.department_name` resolved) set in the admin user form.
 - **Pinning**: `Note.pinned` + `PATCH /api/notes/{id}/pin`; pinned notes always sort first.
@@ -158,9 +159,34 @@ application and no PIC to exercise standalone registration. Credentials in
   filter, `q` search); 422 on an unknown sort.
 - **Alerts**: `GET /api/notes/alerts?within_days=2` → notes linked to an application/server expiring
   soon; drives the amber badge on the navbar Notes icon (`notes-alert-badge`).
+- **Templates**: `NOTE_TEMPLATES` (Incident / Patching / Maintenance window) prefill the form.
 - Page: Active / Deleted tabs, searchable department filter + sort dropdowns
   (`components/catalog/SearchSelect.tsx`), cards click through to a **detail popup**
   (`NoteDetailDialog`) with pin / edit / delete and clickable linked items.
+
+## Server Jira tickets
+- `ServerTicket` on `Server.tickets[]`: jira_id, url, summary, executed_by, status
+  (Open/In Progress/Done/Cancelled), requested_on. Admin-only
+  `POST/PUT/DELETE /api/servers/{id}/tickets[/{ticket_id}]` all return the updated `ServerOut`.
+- Rendered as a **Jira tickets** section in `ServerDrawer` (external links + admin add/edit/delete).
+
+## Table ergonomics (Servers, PIC Management)
+- Both admin tables have click-to-sort headers on every column (`server-sort-*` / `pic-sort-*`) and
+  searchable value filters: servers → OS / environment / status (+ the DC/DRC site chips);
+  PICs → department / position / status, with a "N of M shown" counter.
+- Servers table columns: Server, OS (+version), Type, Environment, Site, Cluster, Applications, PIC,
+  Tickets, Status. PIC table: PIC, Department, Position, Contact, Applications, Servers, Standby,
+  Status.
+
+## Everything-search on the home page
+`InfraSearchResults` queries `/servers?q=`, `/pics?q=` and `/notes?q=` — all three are role-scoped by
+the backend, so a normal user only matches infrastructure attached to their assigned categories and
+notes shared with them. Note hits open the note detail popup.
+
+## Launch statistics
+Application launch/usage statistics were **removed from the UI** (hero stats now show Total apps /
+Active services / Favorited / Categories; no "Most Used" sort, no launch columns or counters). The
+`usage_count` field and `POST /apps/{id}/launch` counter still exist server-side.
 
 ## Site (location) filters
 - Admin Servers list and `/admin/dependency-map` both have DC/DRC/Cloud/Co-location filter chips

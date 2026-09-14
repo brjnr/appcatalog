@@ -10,7 +10,15 @@ from pymongo import ReturnDocument
 from lib.auth import require_admin, require_user
 from lib.db import db
 from lib.visibility import app_name_map, server_is_visible, visible_app_ids
-from models.infra import RefSummary, Server, ServerCreate, ServerOut, ServerUpdate
+from models.infra import (
+    RefSummary,
+    Server,
+    ServerCreate,
+    ServerOut,
+    ServerTicket,
+    ServerTicketInput,
+    ServerUpdate,
+)
 
 router = APIRouter()
 
@@ -188,3 +196,68 @@ async def delete_server(server_id: str, _: dict = Depends(require_admin)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="server not found")
     return None
+
+
+# ------------------------------------------------------------------ Jira tickets per server
+
+
+async def _ticket_server(server_id: str) -> dict:
+    doc = await db.servers.find_one({"id": server_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="server not found")
+    return doc
+
+
+@router.post("/servers/{server_id}/tickets", response_model=ServerOut, status_code=201)
+async def add_server_ticket(
+    server_id: str, input: ServerTicketInput, _: dict = Depends(require_admin)
+):
+    """Record a Jira ticket raised against this server (admin only)."""
+    await _ticket_server(server_id)
+    ticket = ServerTicket(**input.model_dump())
+    await db.servers.update_one(
+        {"id": server_id},
+        {
+            "$push": {"tickets": ticket.model_dump()},
+            "$set": {"updated_at": datetime.now(timezone.utc)},
+        },
+    )
+    return await _to_out(await _ticket_server(server_id))
+
+
+@router.put("/servers/{server_id}/tickets/{ticket_id}", response_model=ServerOut)
+async def update_server_ticket(
+    server_id: str,
+    ticket_id: str,
+    input: ServerTicketInput,
+    _: dict = Depends(require_admin),
+):
+    doc = await _ticket_server(server_id)
+    tickets = list(doc.get("tickets") or [])
+    match = next((t for t in tickets if t.get("id") == ticket_id), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="ticket not found")
+    match.update(input.model_dump())
+    match["updated_at"] = datetime.now(timezone.utc)
+    await db.servers.update_one(
+        {"id": server_id},
+        {"$set": {"tickets": tickets, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return await _to_out(await _ticket_server(server_id))
+
+
+@router.delete("/servers/{server_id}/tickets/{ticket_id}", response_model=ServerOut)
+async def delete_server_ticket(
+    server_id: str, ticket_id: str, _: dict = Depends(require_admin)
+):
+    doc = await _ticket_server(server_id)
+    if not any(t.get("id") == ticket_id for t in (doc.get("tickets") or [])):
+        raise HTTPException(status_code=404, detail="ticket not found")
+    await db.servers.update_one(
+        {"id": server_id},
+        {
+            "$pull": {"tickets": {"id": ticket_id}},
+            "$set": {"updated_at": datetime.now(timezone.utc)},
+        },
+    )
+    return await _to_out(await _ticket_server(server_id))

@@ -435,6 +435,33 @@ async def seed() -> None:
         )
 
     await ensure_indexes()
+    # A couple of Jira tickets so the server drawer has history to show.
+    ticket_specs = [
+        ("DC-BKP-01", "INFRA-1042", "Expand backup repository volume", "Budi Santoso", "Done"),
+        ("DC-BKP-01", "INFRA-1188", "Firmware upgrade on backup appliance", "Jane Smith", "Open"),
+        ("SEC-PROD-01", "SEC-2207", "Rotate vault seal keys", "Andi Pratama", "In Progress"),
+        ("MON-PROD-01", "OPS-3391", "Increase Prometheus retention to 90d", "Siti Rahayu", "Done"),
+    ]
+    for server_name, jira_id, summary, executed_by, status in ticket_specs:
+        await db.servers.update_one(
+            {"name": server_name},
+            {
+                "$push": {
+                    "tickets": {
+                        "id": str(uuid.uuid4()),
+                        "jira_id": jira_id,
+                        "url": f"https://jira.company.com/browse/{jira_id}",
+                        "summary": summary,
+                        "executed_by": executed_by,
+                        "status": status,
+                        "requested_on": now.strftime("%Y-%m-%d"),
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                }
+            },
+        )
+
     print(
         f"Seeded {len(CATEGORY_SEEDS)} categories, {len(USER_SEEDS)} users, "
         f"{len(docs)} applications, {len(SERVER_SEEDS)} servers, {len(PIC_SEEDS)} PICs."

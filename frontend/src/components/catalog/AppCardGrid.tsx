@@ -70,11 +70,10 @@ export function AppCardGrid({
 
       <div className="flex items-center justify-between gap-2 pt-3">
         <span
-          data-testid={`card-usage-${slug}`}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+          data-testid={`card-category-${slug}`}
+          className="inline-flex items-center gap-1 truncate text-xs text-muted-foreground"
         >
-          <MousePointerClick className="h-3.5 w-3.5" aria-hidden="true" />
-          {formatCount(app.usage_count)} launches
+          {app.category_name}
         </span>
         <Button
           size="sm"

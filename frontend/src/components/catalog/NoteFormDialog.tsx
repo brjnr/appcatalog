@@ -5,6 +5,8 @@ import { Plus, Trash2 } from "lucide-react";
 import { apiErrorMessage, apiGet, apiPost, apiPut } from "@/lib/api";
 import {
   NOTE_LINK_KINDS,
+  NOTE_TEMPLATES,
+  slugify,
   type CatalogApp,
   type Department,
   type Note,
@@ -32,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 interface NoteFormDialogProps {
   open: boolean;
@@ -54,7 +57,7 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
   const [noteDate, setNoteDate] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [links, setLinks] = useState<NoteLink[]>([]);
-  const [departmentId, setDepartmentId] = useState("");
+  const [departmentIds, setDepartmentIds] = useState<string[]>([]);
 
   const { data: apps } = useQuery({
     queryKey: ["apps"],
@@ -85,7 +88,7 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
     setNoteDate(initial?.note_date ?? today);
     setExpiresAt(initial?.expires_at ?? addDays(today, 7));
     setLinks(initial?.links ?? []);
-    setDepartmentId(initial?.department_id ?? "");
+    setDepartmentIds(initial?.department_ids ?? []);
   }, [open, initial]);
 
   const save = useMutation({
@@ -129,7 +132,7 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
       note_date: noteDate,
       expires_at: expiresAt,
       links,
-      department_id: departmentId,
+      department_ids: departmentIds,
     });
   };
 
@@ -161,6 +164,26 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
           </div>
 
           <div className="grid gap-1.5">
+            <Label>Start from a template</Label>
+            <div className="flex flex-wrap gap-1.5" data-testid="note-form-templates">
+              {NOTE_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  data-testid={`note-form-template-${template.id}`}
+                  onClick={() => {
+                    setTitle((prev) => (prev.trim() ? prev : template.title));
+                    setBody(template.body);
+                  }}
+                  className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors duration-150 hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 dark:hover:bg-sky-950/40"
+                >
+                  {template.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-1.5">
             <Label htmlFor="note-form-body">Description</Label>
             <Textarea
               id="note-form-body"
@@ -173,26 +196,51 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="note-form-department">Share with</Label>
-            <Select
-              value={departmentId || "__all__"}
-              onValueChange={(value) => setDepartmentId(value === "__all__" ? "" : value)}
-            >
-              <SelectTrigger id="note-form-department" data-testid="note-form-department-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="max-h-64">
-                <SelectItem value="__all__">Everyone</SelectItem>
-                {(departments ?? []).map((department) => (
-                  <SelectItem key={department.id} value={department.id}>
+            <Label>Share with</Label>
+            <div className="flex flex-wrap gap-1.5" data-testid="note-form-departments">
+              <button
+                type="button"
+                data-testid="note-form-department-everyone"
+                onClick={() => setDepartmentIds([])}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
+                  departmentIds.length === 0
+                    ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                    : "border-border text-muted-foreground hover:bg-muted",
+                )}
+              >
+                Everyone
+              </button>
+              {(departments ?? []).map((department) => {
+                const on = departmentIds.includes(department.id);
+                return (
+                  <button
+                    key={department.id}
+                    type="button"
+                    data-testid={`note-form-department-${slugify(department.name)}`}
+                    aria-pressed={on}
+                    onClick={() =>
+                      setDepartmentIds((prev) =>
+                        on
+                          ? prev.filter((id) => id !== department.id)
+                          : [...prev, department.id],
+                      )
+                    }
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
+                      on
+                        ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                        : "border-border text-muted-foreground hover:bg-muted",
+                    )}
+                  >
                     {department.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </button>
+                );
+              })}
+            </div>
             <p className="text-[11px] text-muted-foreground">
-              A department-shared note is visible to that department and administrators, and anyone
-              in it can edit the note.
+              Pick one or more departments — members of any of them (plus administrators) can see
+              and edit this note. Leave it on "Everyone" to share company-wide.
             </p>
           </div>
 

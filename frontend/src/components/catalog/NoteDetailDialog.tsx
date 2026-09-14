@@ -80,7 +80,7 @@ export function NoteDetailDialog({
                   className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 font-medium text-foreground"
                 >
                   <Users className="h-3 w-3" aria-hidden="true" />
-                  {note.department_name || "Everyone"}
+                  {note.department_names.length > 0 ? note.department_names.join(", ") : "Everyone"}
                 </span>
                 <span
                   data-testid="note-detail-retention"

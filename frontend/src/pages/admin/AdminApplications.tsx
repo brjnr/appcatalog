@@ -72,20 +72,19 @@ export default function AdminApplications() {
               <TableHead>Category</TableHead>
               <TableHead>Environment</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Launches</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
                   Loading applications…
                 </TableCell>
               </TableRow>
             ) : (apps ?? []).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
                   No applications registered yet.
                 </TableCell>
               </TableRow>
@@ -114,7 +113,6 @@ export default function AdminApplications() {
                     <TableCell>
                       <StatusBadge status={app.status} />
                     </TableCell>
-                    <TableCell className="text-right">{formatCount(app.usage_count)}</TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex gap-1">
                         <Button
