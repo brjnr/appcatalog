@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Eye, Pencil, Plus, Power, Search, Trash2 } from "lucide-react";
 import { apiDelete, apiErrorMessage, apiGet, apiPut } from "@/lib/api";
 import { InfraNavProvider, useInfraNav } from "@/lib/infraNav";
-import { slugify, type Server } from "@/lib/types";
+import { LOCATION_LABELS, SERVER_LOCATIONS, slugify, type Server } from "@/lib/types";
 import { InfraStatusBadge } from "@/components/catalog/InfraBits";
 import { ServerFormDialog } from "@/components/catalog/ServerFormDialog";
 import { ServerDrawer } from "@/components/catalog/ServerDrawer";
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 export default function AdminServersPage() {
   return (
@@ -29,6 +30,7 @@ function AdminServers() {
   const queryClient = useQueryClient();
   const { openServer, openPic } = useInfraNav();
   const [search, setSearch] = useState("");
+  const [location, setLocation] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Server | null>(null);
   const [deleting, setDeleting] = useState<Server | null>(null);
@@ -63,11 +65,18 @@ function AdminServers() {
 
   const filtered = (servers ?? []).filter((server) => {
     const q = search.trim().toLowerCase();
+    if (location && server.location !== location) return false;
     if (!q) return true;
-    return `${server.name} ${server.hostname} ${server.ip_address} ${server.vm_name}`
+    return `${server.name} ${server.hostname} ${server.ip_address} ${server.vm_name} ${server.location}`
       .toLowerCase()
       .includes(q);
   });
+
+  // Site coverage: DC / DRC / Cloud / Co-location counts, doubling as filter chips.
+  const locationCounts = SERVER_LOCATIONS.map((site) => ({
+    site,
+    count: (servers ?? []).filter((server) => server.location === site).length,
+  }));
 
   return (
     <div data-testid="servers-page" className="pb-10">
@@ -105,6 +114,42 @@ function AdminServers() {
             <Plus className="h-4 w-4" aria-hidden="true" /> Add Server
           </Button>
         </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-1.5" data-testid="server-location-filter">
+        <span className="mr-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Site
+        </span>
+        <button
+          type="button"
+          data-testid="server-location-all"
+          onClick={() => setLocation(null)}
+          className={cn(
+            "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
+            location === null
+              ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+              : "border-border text-muted-foreground hover:bg-muted",
+          )}
+        >
+          All ({servers?.length ?? 0})
+        </button>
+        {locationCounts.map(({ site, count }) => (
+          <button
+            key={site}
+            type="button"
+            data-testid={`server-location-filter-${slugify(site)}`}
+            title={LOCATION_LABELS[site]}
+            onClick={() => setLocation((prev) => (prev === site ? null : site))}
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
+              location === site
+                ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                : "border-border text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {site} ({count})
+          </button>
+        ))}
       </div>
 
       <div className="mt-4 overflow-hidden rounded-xl border bg-card" data-testid="servers-table">

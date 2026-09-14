@@ -14,6 +14,8 @@ interface ConfirmDeleteDialogProps {
   appName: string;
   pending: boolean;
   onConfirm: () => void;
+  /** What is being deleted, e.g. "department" — defaults to the catalog application copy. */
+  description?: string;
 }
 
 export function ConfirmDeleteDialog({
@@ -22,6 +24,7 @@ export function ConfirmDeleteDialog({
   appName,
   pending,
   onConfirm,
+  description,
 }: ConfirmDeleteDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -29,8 +32,8 @@ export function ConfirmDeleteDialog({
         <DialogHeader>
           <DialogTitle>Delete “{appName}”?</DialogTitle>
           <DialogDescription>
-            This permanently removes the application from the catalog. Existing bookmarks to its
-            detail page will stop resolving.
+            {description ??
+              "This permanently removes the application from the catalog. Existing bookmarks to its detail page will stop resolving."}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

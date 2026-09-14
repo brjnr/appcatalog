@@ -68,6 +68,8 @@ from routers.categories import router as categories_router
 from routers.apps import router as apps_router
 from routers.servers import router as servers_router
 from routers.pics import router as pics_router
+from routers.notes import router as notes_router
+from routers.departments import router as departments_router
 
 # Include feature routers on the /api router
 api_router.include_router(auth_router)
@@ -76,6 +78,8 @@ api_router.include_router(categories_router)
 api_router.include_router(apps_router)
 api_router.include_router(servers_router)
 api_router.include_router(pics_router)
+api_router.include_router(notes_router)
+api_router.include_router(departments_router)
 
 # Uploaded category icons live on disk and are served under /api/uploads (proxied by Vite).
 UPLOADS_DIR = ROOT_DIR / "uploads"

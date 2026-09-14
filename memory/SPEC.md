@@ -93,7 +93,8 @@ never cropped/stretched); the upload dialog warns on non-square images and shows
   + user × category matrix).
 
 ## Seed data (`cd /app/backend && python seed.py`)
-8 categories, 3 users, 36 applications, 14 servers, 6 PICs. Idempotent (clears
+8 categories, 3 users, 36 applications, 14 servers, 6 PICs, 5 departments (PICs linked by
+`department_id`), 11 DC + 3 DRC servers. Idempotent (clears
 sessions/users/categories/apps/servers/pics first). `STG-TEST-01` is intentionally left with no
 application and no PIC to exercise standalone registration. Credentials in
 `memory/test_credentials.md`.
@@ -110,6 +111,41 @@ application and no PIC to exercise standalone registration. Credentials in
   (never percentages in `path d`).
 - Main catalog search also queries infra: `InfraSearchResults` lists matching servers (name/hostname/
   IP/location) and PICs (name/initials) and opens the corresponding drawer.
+
+## Departments (managed entity)
+- `models/departments.py` + `routers/departments.py`: `Department` (id, name unique, description,
+  status active|inactive) with `DepartmentOut.pic_count`. `GET /api/departments[?include_inactive]`
+  for any signed-in user; POST/PUT/DELETE admin-only. Rename cascades onto `pics.department`;
+  deleting a department with PICs returns **409**.
+- `Pic.department_id` → departments.id, with the department **name** denormalised on `pic.department`
+  (backend keeps it in sync). The PIC form picks the department from a dropdown.
+- Admin page `/admin/departments` (menu "Departments").
+
+## Standby editing, grouping, and upcoming view
+- `GET /api/standby?month=YYYY-MM` entries now carry `pic_department_id` + `pic_department`.
+- `GET /api/standby/upcoming?days=N` — today + next days (server-anchored `today`).
+- Admin-only mutations: `POST /api/standby` (409 on duplicate PIC+app+date),
+  `PATCH /api/standby/move` (`{pic_id, application_id, from_date, to_date}`), and
+  `DELETE /api/standby?pic_id=&date=&application_id=`.
+- `/standby` page: department filter chips with counts, a Today/Tomorrow/+2 panel where clicking a
+  department chip reveals the PICs covering it that day, HTML5 **drag a shift to another day** to
+  reschedule (admins), a per-day `+` to add a shift, and an `x` to remove one.
+
+## Notes & memos (`/notes`)
+- `models/notes.py` + `routers/notes.py`. `Note`: title, body, author_id/author_name (from the
+  session), `note_date`, `expires_at` (default note_date + 7 days), `status` active|trashed,
+  `trashed_at`, `links[]` (many; each `{kind: application|server|pic, id}`). `NoteOut` adds
+  `links_out` (resolved names), `days_left`, `purge_on`, `can_edit`.
+- Every signed-in user reads all notes; **only the author or an administrator** may edit/delete
+  (403 otherwise). `GET /api/notes?view=active|trash&q=` runs the sweep first: expired notes →
+  Trash, Trash older than 7 days → purged. `POST /notes/{id}/restore` pulls one back (pushing a
+  lapsed retention date forward); `DELETE /notes/{id}[?permanent=true]` trashes then purges.
+- Page has Active / Deleted tabs, search, and clickable linked chips (application → detail page,
+  server/PIC → drawer).
+
+## Site (location) filters
+- Admin Servers list and `/admin/dependency-map` both have DC/DRC/Cloud/Co-location filter chips
+  with counts; the dashboard has a **Site coverage** card. `MapNode.location` carries the site.
 
 ## Notes
 - base-ui gotchas hit here: `Menu.Item` fires **onClick** (not `onSelect`), and

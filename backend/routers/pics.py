@@ -1,10 +1,10 @@
 """PIC (person in charge) endpoints — scoped reads, admin-only mutations."""
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
 
 from lib.auth import require_admin, require_user
@@ -56,6 +56,20 @@ async def _to_out(doc: dict) -> PicOut:
     )
 
 
+async def _resolve_department(payload: dict) -> None:
+    """Department is picked from the managed list; keep the denormalised name in step."""
+    if "department_id" not in payload:
+        return
+    department_id = payload.get("department_id") or ""
+    if not department_id:
+        payload["department"] = ""
+        return
+    doc = await db.departments.find_one({"id": department_id}, {"name": 1})
+    if not doc:
+        raise HTTPException(status_code=422, detail="department does not exist")
+    payload["department"] = doc["name"]
+
+
 async def _validate_apps(app_ids: list[str] | None) -> None:
     if app_ids:
         found = await db.apps.count_documents({"id": {"$in": list(set(app_ids))}})
@@ -83,6 +97,8 @@ class StandbyCalendarEntry(BaseModel):
     pic_id: str
     pic_name: str
     pic_initials: str
+    pic_department_id: str = ""
+    pic_department: str = ""
     application_id: str
     application_name: str
     notes: str = ""
@@ -93,14 +109,25 @@ class StandbyCalendar(BaseModel):
     entries: list[StandbyCalendarEntry]
 
 
-@router.get("/standby", response_model=StandbyCalendar)
-async def standby_calendar(month: str | None = None, user: dict = Depends(require_user)):
-    """On-call roster for a month (defaults to the current month, server-anchored).
-    Scoped: a normal user only sees shifts for applications assigned to them."""
-    target = month or today_iso()[:7]
-    if len(target) != 7 or target[4] != "-":
-        raise HTTPException(status_code=422, detail="month must be formatted YYYY-MM")
+class StandbyShiftInput(BaseModel):
+    pic_id: str
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    application_id: str
+    notes: str = Field(default="", max_length=300)
 
+
+class StandbyMoveInput(BaseModel):
+    pic_id: str
+    application_id: str
+    from_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    to_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+async def _standby_entries(
+    user: dict, predicate
+) -> list[StandbyCalendarEntry]:
+    """Flatten every PIC's schedule, keeping the rows `predicate(date)` accepts and the
+    applications this user is allowed to see."""
     allowed = await visible_app_ids(user)
     docs = await db.pics.find().sort("name", 1).to_list(1000)
     app_names = await app_name_map(
@@ -112,7 +139,7 @@ async def standby_calendar(month: str | None = None, user: dict = Depends(requir
         for entry in pic.get("standby_schedule") or []:
             date = entry.get("date", "")
             app_id = entry.get("application_id", "")
-            if not date.startswith(target):
+            if not date or not predicate(date):
                 continue
             if allowed is not None and app_id not in allowed:
                 continue
@@ -122,14 +149,160 @@ async def standby_calendar(month: str | None = None, user: dict = Depends(requir
                     pic_id=pic["id"],
                     pic_name=pic["name"],
                     pic_initials=pic.get("initials", ""),
+                    pic_department_id=pic.get("department_id", ""),
+                    pic_department=pic.get("department", ""),
                     application_id=app_id,
                     application_name=app_names.get(app_id, "—"),
                     notes=entry.get("notes", ""),
                 )
             )
-
     entries.sort(key=lambda e: (e.date, e.pic_name))
+    return entries
+
+
+@router.get("/standby", response_model=StandbyCalendar)
+async def standby_calendar(month: str | None = None, user: dict = Depends(require_user)):
+    """On-call roster for a month (defaults to the current month, server-anchored).
+    Scoped: a normal user only sees shifts for applications assigned to them."""
+    target = month or today_iso()[:7]
+    if len(target) != 7 or target[4] != "-":
+        raise HTTPException(status_code=422, detail="month must be formatted YYYY-MM")
+
+    entries = await _standby_entries(user, lambda date: date.startswith(target))
     return StandbyCalendar(month=target, entries=entries)
+
+
+class StandbyUpcoming(BaseModel):
+    today: str
+    days: int
+    entries: list[StandbyCalendarEntry]
+
+
+@router.get("/standby/upcoming", response_model=StandbyUpcoming)
+async def standby_upcoming(days: int = 7, user: dict = Depends(require_user)):
+    """Who is on standby today and over the next `days` days (server-anchored today)."""
+    if days < 1 or days > 31:
+        raise HTTPException(status_code=422, detail="days must be between 1 and 31")
+    today = today_iso()
+    horizon = (datetime.strptime(today, "%Y-%m-%d") + timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    entries = await _standby_entries(user, lambda date: today <= date <= horizon)
+    return StandbyUpcoming(today=today, days=days, entries=entries)
+
+
+async def _assert_shift_refs(pic_id: str, application_id: str) -> None:
+    if not await db.pics.find_one({"id": pic_id}, {"id": 1}):
+        raise HTTPException(status_code=404, detail="PIC not found")
+    if not await db.apps.find_one({"id": application_id}, {"id": 1}):
+        raise HTTPException(status_code=422, detail="application does not exist")
+
+
+@router.post("/standby", status_code=201, response_model=StandbyCalendarEntry)
+async def add_standby_shift(input: StandbyShiftInput, _: dict = Depends(require_admin)):
+    """Assign one on-call shift (admin only)."""
+    await _assert_shift_refs(input.pic_id, input.application_id)
+    existing = await db.pics.find_one(
+        {
+            "id": input.pic_id,
+            "standby_schedule": {
+                "$elemMatch": {"date": input.date, "application_id": input.application_id}
+            },
+        },
+        {"id": 1},
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="that PIC already covers this app on that date")
+
+    await db.pics.update_one(
+        {"id": input.pic_id},
+        {
+            "$push": {
+                "standby_schedule": {
+                    "date": input.date,
+                    "application_id": input.application_id,
+                    "notes": input.notes,
+                }
+            },
+            "$set": {"updated_at": datetime.now(timezone.utc)},
+        },
+    )
+    pic = await db.pics.find_one({"id": input.pic_id})
+    names = await app_name_map([input.application_id])
+    return StandbyCalendarEntry(
+        date=input.date,
+        pic_id=input.pic_id,
+        pic_name=pic["name"],
+        pic_initials=pic.get("initials", ""),
+        pic_department_id=pic.get("department_id", ""),
+        pic_department=pic.get("department", ""),
+        application_id=input.application_id,
+        application_name=names.get(input.application_id, "—"),
+        notes=input.notes,
+    )
+
+
+@router.patch("/standby/move", response_model=StandbyCalendarEntry)
+async def move_standby_shift(input: StandbyMoveInput, _: dict = Depends(require_admin)):
+    """Drag-and-drop reschedule: move one shift to another day (admin only)."""
+    pic = await db.pics.find_one({"id": input.pic_id})
+    if not pic:
+        raise HTTPException(status_code=404, detail="PIC not found")
+
+    schedule = list(pic.get("standby_schedule") or [])
+    match = next(
+        (
+            e
+            for e in schedule
+            if e.get("date") == input.from_date
+            and e.get("application_id") == input.application_id
+        ),
+        None,
+    )
+    if not match:
+        raise HTTPException(status_code=404, detail="standby shift not found")
+    if any(
+        e.get("date") == input.to_date and e.get("application_id") == input.application_id
+        for e in schedule
+    ):
+        raise HTTPException(status_code=409, detail="that shift already exists on the target date")
+
+    moved = {**match, "date": input.to_date}
+    schedule = [e for e in schedule if e is not match] + [moved]
+    await db.pics.update_one(
+        {"id": input.pic_id},
+        {"$set": {"standby_schedule": schedule, "updated_at": datetime.now(timezone.utc)}},
+    )
+    names = await app_name_map([input.application_id])
+    return StandbyCalendarEntry(
+        date=input.to_date,
+        pic_id=input.pic_id,
+        pic_name=pic["name"],
+        pic_initials=pic.get("initials", ""),
+        pic_department_id=pic.get("department_id", ""),
+        pic_department=pic.get("department", ""),
+        application_id=input.application_id,
+        application_name=names.get(input.application_id, "—"),
+        notes=moved.get("notes", ""),
+    )
+
+
+@router.delete("/standby", status_code=204)
+async def delete_standby_shift(
+    pic_id: str,
+    date: str,
+    application_id: str,
+    _: dict = Depends(require_admin),
+):
+    """Remove one on-call shift (admin only)."""
+    result = await db.pics.update_one(
+        {"id": pic_id},
+        {
+            "$pull": {"standby_schedule": {"date": date, "application_id": application_id}},
+            "$set": {"updated_at": datetime.now(timezone.utc)},
+        },
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="PIC not found")
+    return None
 
 
 @router.get("/pics", response_model=list[PicOut])
@@ -172,6 +345,7 @@ async def get_pic(pic_id: str, user: dict = Depends(require_user)):
 async def create_pic(input: PicCreate, _: dict = Depends(require_admin)):
     await _validate_apps(input.application_ids)
     payload = input.model_dump()
+    await _resolve_department(payload)
     server_ids = payload.pop("server_ids", [])
     pic = Pic(**payload)
     await db.pics.insert_one(pic.model_dump())
@@ -188,6 +362,7 @@ async def update_pic(pic_id: str, input: PicUpdate, _: dict = Depends(require_ad
         raise HTTPException(status_code=404, detail="PIC not found")
 
     server_ids = changes.pop("server_ids", None)
+    await _resolve_department(changes)
     await _validate_apps(changes.get("application_ids"))
     if server_ids is not None:
         await _sync_server_links(pic_id, server_ids)

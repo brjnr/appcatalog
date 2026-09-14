@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { AppWindow, KeyRound, Shapes, Users } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { formatCount } from "@/lib/format";
-import type { AppCategory, CatalogApp, SessionUser } from "@/lib/types";
+import type { AppCategory, CatalogApp, SessionUser, Server } from "@/lib/types";
+import { LOCATION_LABELS, SERVER_LOCATIONS, slugify } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 
 // Admin overview: directory sizes, role split, and category coverage.
@@ -20,6 +21,17 @@ export default function AdminDashboard() {
     queryKey: ["apps"],
     queryFn: () => apiGet<CatalogApp[]>("/apps"),
   });
+
+  const { data: servers } = useQuery({
+    queryKey: ["servers"],
+    queryFn: () => apiGet<Server[]>("/servers"),
+  });
+
+  const siteCoverage = SERVER_LOCATIONS.map((site) => ({
+    site,
+    count: (servers ?? []).filter((server) => server.location === site).length,
+  }));
+  const totalServers = servers?.length ?? 0;
 
   const allUsers = users ?? [];
   const admins = allUsers.filter((u) => u.role === "administrator").length;
@@ -120,6 +132,45 @@ export default function AdminDashboard() {
           </div>
         </Card>
 
+        <Card className="p-5" data-testid="site-coverage-card">
+          <h2 className="font-heading text-sm font-semibold text-foreground">Site coverage</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {totalServers} server(s) across DC, DRC, cloud, and co-location sites.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {siteCoverage.map(({ site, count }) => (
+              <div
+                key={site}
+                data-testid={`site-coverage-${slugify(site)}`}
+                className="rounded-lg border p-3"
+              >
+                <div className="flex items-baseline justify-between">
+                  <span className="font-mono text-xs font-semibold text-sky-700 dark:text-sky-300">
+                    {site}
+                  </span>
+                  <span className="font-heading text-lg font-semibold text-foreground">{count}</span>
+                </div>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {LOCATION_LABELS[site]}
+                </p>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-sky-500 transition-[width] duration-300"
+                    style={{ width: `${totalServers ? (count / totalServers) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <Link
+            to="/admin/servers"
+            data-testid="site-coverage-link"
+            className="mt-3 inline-block text-xs font-medium text-sky-700 hover:underline dark:text-sky-300"
+          >
+            Filter servers by site →
+          </Link>
+        </Card>
+
         <Card className="p-5">
           <h2 className="font-heading text-sm font-semibold text-foreground">Quick actions</h2>
           <div className="mt-4 flex flex-col gap-2 text-sm">
@@ -128,6 +179,9 @@ export default function AdminDashboard() {
             </Link>
             <Link to="/admin/categories" data-testid="quick-link-categories" className="rounded-lg border px-3 py-2 transition-colors hover:bg-muted">
               Create categories and upload icons
+            </Link>
+            <Link to="/admin/departments" data-testid="quick-link-departments" className="rounded-lg border px-3 py-2 transition-colors hover:bg-muted">
+              Create departments for the standby roster
             </Link>
             <Link to="/admin/access" data-testid="quick-link-access" className="rounded-lg border px-3 py-2 transition-colors hover:bg-muted">
               Assign categories to users

@@ -54,6 +54,7 @@ class MapNode(BaseModel):
     name: str
     kind: str  # "application" | "server"
     meta: str = ""  # category for apps, location/environment for servers
+    location: str = ""  # site role (DC/DRC/Cloud/Co-location) — servers only
 
 
 class MapEdge(BaseModel):
@@ -112,6 +113,7 @@ async def dependency_map(user: dict = Depends(require_user)):
                 name=s["name"],
                 kind="server",
                 meta=f"{s.get('location', 'DC')} · {s.get('environment', '')}".strip(" ·"),
+                location=s.get("location", "DC"),
             )
             for s in servers
         ],

@@ -154,6 +154,7 @@ export interface Pic {
   employee_id: string;
   email: string;
   phone: string;
+  department_id: string;
   department: string;
   position: string;
   status: string;
@@ -192,6 +193,8 @@ export interface StandbyCalendarEntry {
   pic_id: string;
   pic_name: string;
   pic_initials: string;
+  pic_department_id: string;
+  pic_department: string;
   application_id: string;
   application_name: string;
   notes: string;
@@ -202,12 +205,70 @@ export interface StandbyCalendar {
   entries: StandbyCalendarEntry[];
 }
 
+// Departments (models/departments.py) — the PIC organisational unit used to group standby
+export interface Department {
+  id: string;
+  name: string;
+  description: string;
+  status: string; // "active" | "inactive"
+  created_at: string;
+  updated_at: string;
+  pic_count: number;
+}
+
+export const DEPARTMENT_STATUSES = ["active", "inactive"] as const;
+
+// GET /api/standby/upcoming — who is on standby today and over the next days
+export interface StandbyUpcoming {
+  today: string;
+  days: number;
+  entries: StandbyCalendarEntry[];
+}
+
+// ------------------------------------------------------- notes / memos (models/notes.py)
+export type NoteLinkKind = "application" | "server" | "pic";
+
+export interface NoteLink {
+  kind: NoteLinkKind;
+  id: string;
+}
+
+export interface NoteLinkOut extends NoteLink {
+  name: string;
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  body: string;
+  author_id: string;
+  author_name: string;
+  note_date: string;
+  expires_at: string;
+  status: string; // "active" | "trashed"
+  trashed_at: string | null;
+  links: NoteLink[];
+  created_at: string;
+  updated_at: string;
+  links_out: NoteLinkOut[];
+  days_left: number;
+  purge_on: string | null;
+  can_edit: boolean;
+}
+
+export const NOTE_LINK_KINDS: { id: NoteLinkKind; label: string }[] = [
+  { id: "application", label: "Application" },
+  { id: "server", label: "Server" },
+  { id: "pic", label: "PIC" },
+];
+
 // Application <-> server graph (GET /api/dependency-map)
 export interface MapNode {
   id: string;
   name: string;
   kind: string;
   meta: string;
+  location: string;
 }
 
 export interface DependencyMapData {

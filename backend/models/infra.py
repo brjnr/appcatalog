@@ -130,7 +130,8 @@ class Pic(BaseModel):
     employee_id: str = ""
     email: str = ""
     phone: str = ""
-    department: str = ""
+    department_id: str = ""  # -> departments.id; groups the standby calendar
+    department: str = ""  # denormalised department name, kept in sync by the backend
     position: str = ""
     status: PicStatus = "Active"
     application_ids: list[str] = Field(default_factory=list)
@@ -166,7 +167,7 @@ class PicCreate(BaseModel):
     employee_id: str = Field(default="", max_length=40)
     email: EmailStr | Literal[""] = ""
     phone: str = Field(default="", max_length=40)
-    department: str = Field(default="", max_length=120)
+    department_id: str = Field(default="", max_length=60)
     position: str = Field(default="", max_length=120)
     status: PicStatus = "Active"
     application_ids: list[str] = Field(default_factory=list)
@@ -188,7 +189,7 @@ class PicUpdate(BaseModel):
     employee_id: str | None = Field(default=None, max_length=40)
     email: EmailStr | Literal[""] | None = None
     phone: str | None = Field(default=None, max_length=40)
-    department: str | None = Field(default=None, max_length=120)
+    department_id: str | None = Field(default=None, max_length=60)
     position: str | None = Field(default=None, max_length=120)
     status: PicStatus | None = None
     application_ids: list[str] | None = None

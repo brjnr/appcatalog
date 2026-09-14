@@ -7,6 +7,7 @@ import {
   PIC_STATUSES,
   slugify,
   type CatalogApp,
+  type Department,
   type Pic,
   type Server,
   type StandbyEntry,
@@ -45,8 +46,8 @@ export function PicFormDialog({ open, onOpenChange, initial }: PicFormDialogProp
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [department, setDepartment] = useState("");
   const [position, setPosition] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
   const [status, setStatus] = useState("Active");
   const [appIds, setAppIds] = useState<string[]>([]);
   const [serverIds, setServerIds] = useState<string[]>([]);
@@ -55,6 +56,11 @@ export function PicFormDialog({ open, onOpenChange, initial }: PicFormDialogProp
   const { data: apps } = useQuery({
     queryKey: ["apps"],
     queryFn: () => apiGet<CatalogApp[]>("/apps"),
+    enabled: open,
+  });
+  const { data: departments } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => apiGet<Department[]>("/departments"),
     enabled: open,
   });
   const { data: servers } = useQuery({
@@ -70,8 +76,8 @@ export function PicFormDialog({ open, onOpenChange, initial }: PicFormDialogProp
     setEmployeeId(initial?.employee_id ?? "");
     setEmail(initial?.email ?? "");
     setPhone(initial?.phone ?? "");
-    setDepartment(initial?.department ?? "");
     setPosition(initial?.position ?? "");
+    setDepartmentId(initial?.department_id ?? "");
     setStatus(initial?.status ?? "Active");
     setAppIds(initial?.application_ids ?? []);
     setServerIds((initial?.servers ?? []).map((s) => s.id));
@@ -111,8 +117,8 @@ export function PicFormDialog({ open, onOpenChange, initial }: PicFormDialogProp
       employee_id: employeeId.trim(),
       email: email.trim(),
       phone: phone.trim(),
-      department: department.trim(),
       position: position.trim(),
+      department_id: departmentId,
       status,
       application_ids: appIds,
       server_ids: serverIds,
@@ -203,13 +209,21 @@ export function PicFormDialog({ open, onOpenChange, initial }: PicFormDialogProp
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="pic-form-department">Department</Label>
-              <Input
-                id="pic-form-department"
-                value={department}
-                onChange={(event) => setDepartment(event.target.value)}
-                data-testid="pic-form-department-input"
-                placeholder="IT Infrastructure"
-              />
+              <Select value={departmentId} onValueChange={setDepartmentId}>
+                <SelectTrigger id="pic-form-department" data-testid="pic-form-department-select">
+                  <SelectValue placeholder="Select a department" />
+                </SelectTrigger>
+                <SelectContent className="max-h-64">
+                  {(departments ?? []).map((dept) => (
+                    <SelectItem key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Managed in Admin → Departments; groups the standby calendar
+              </p>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="pic-form-position">Position</Label>

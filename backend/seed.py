@@ -227,32 +227,47 @@ SERVER_SEEDS = [
 PIC_SEEDS = [
     {"name": "Jane Smith", "initials": "JS", "employee_id": "EMP002", "email": "jane.smith@company.com",
      "phone": "+62 811-1000-002", "department": "IT Infrastructure", "position": "Infrastructure Engineer",
+     "team": "Infrastructure",
      "status": "Active", "apps": ["Splunk Enterprise SIEM", "Grafana Enterprise"],
      "standby": [("Splunk Enterprise SIEM", 1, "Primary on-call for SIEM ingestion"),
                  ("Grafana Enterprise", 6, "Dashboard and alerting coverage")]},
     {"name": "Andi Pratama", "initials": "AP", "employee_id": "EMP007", "email": "andi.pratama@company.com",
      "phone": "+62 811-1000-007", "department": "Security Operations", "position": "Security Engineer",
+     "team": "Security",
      "status": "Active", "apps": ["CyberArk PAS", "Tenable Nessus", "HashiCorp Vault"],
      "standby": [("CyberArk PAS", 3, "Credential vault escalation"),
                  ("Tenable Nessus", 9, "Vulnerability scan window")]},
     {"name": "Budi Santoso", "initials": "BS", "employee_id": "EMP011", "email": "budi.santoso@company.com",
      "phone": "+62 811-1000-011", "department": "IT Infrastructure", "position": "Virtualization Lead",
+     "team": "Infrastructure",
      "status": "Active", "apps": ["VMware vCenter", "Kubernetes OpenShift", "Veeam Backup & Replication"],
      "standby": [("VMware vCenter", 2, "Hypervisor maintenance window"),
                  ("Veeam Backup & Replication", 12, "Backup restore verification")]},
     {"name": "Siti Rahayu", "initials": "SR", "employee_id": "EMP015", "email": "siti.rahayu@company.com",
      "phone": "+62 811-1000-015", "department": "Monitoring & Observability", "position": "SRE",
+     "team": "Monitoring",
      "status": "Active", "apps": ["Prometheus & Alertmanager", "Dynatrace OneAgent", "Datadog APM"],
      "standby": [("Prometheus & Alertmanager", 4, "Alert routing duty"),
                  ("Datadog APM", 11, "Trace pipeline monitoring")]},
     {"name": "Rizki Hakim", "initials": "RH", "employee_id": "EMP021", "email": "rizki.hakim@company.com",
      "phone": "+62 811-1000-021", "department": "Network Engineering", "position": "Network Architect",
+     "team": "Network",
      "status": "Active", "apps": ["Palo Alto Panorama", "Infoblox DDI", "Cisco DNA Center"],
      "standby": [("Palo Alto Panorama", 5, "Firewall policy change freeze")]},
     {"name": "Dewi Lestari", "initials": "DL", "employee_id": "EMP029", "email": "dewi.lestari@company.com",
      "phone": "+62 811-1000-029", "department": "Business Applications", "position": "Application Support Lead",
+     "team": "Business Applications",
      "status": "Inactive", "apps": ["Jira Software", "SAP S/4HANA ERP"],
      "standby": [("SAP S/4HANA ERP", 8, "Month-end close support")]},
+]
+
+
+DEPARTMENT_SEEDS = [
+    ("Infrastructure", "Servers, virtualization, storage, and backup platforms"),
+    ("Security", "Identity, vaulting, vulnerability management, and SOC tooling"),
+    ("Monitoring", "Observability, APM, alert routing, and dashboards"),
+    ("Network", "Routing, firewalls, DNS/DHCP/IPAM, and campus networking"),
+    ("Business Applications", "ERP, CRM, HR, finance, and collaboration apps"),
 ]
 
 
@@ -328,6 +343,23 @@ async def seed() -> None:
     await db.apps.insert_many(docs)
     app_ids = {doc["name"]: doc["id"] for doc in docs}
 
+    # Departments (PICs reference them by id)
+    await db.departments.delete_many({})
+    department_ids: dict[str, str] = {}
+    for dept_name, dept_desc in DEPARTMENT_SEEDS:
+        dept_id = str(uuid.uuid4())
+        department_ids[dept_name] = dept_id
+        await db.departments.insert_one(
+            {
+                "id": dept_id,
+                "name": dept_name,
+                "description": dept_desc,
+                "status": "active",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+
     # PICs first (servers reference them by id)
     await db.pics.delete_many({})
     await db.servers.delete_many({})
@@ -343,7 +375,8 @@ async def seed() -> None:
                 "employee_id": spec["employee_id"],
                 "email": spec["email"],
                 "phone": spec["phone"],
-                "department": spec["department"],
+                "department_id": department_ids[spec["team"]],
+                "department": spec["team"],
                 "position": spec["position"],
                 "status": spec["status"],
                 "application_ids": [app_ids[name] for name in spec["apps"]],

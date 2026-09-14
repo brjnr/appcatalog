@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { Building2, CalendarDays, LayoutDashboard, Moon, Plus, Search, ShieldCheck, Star, Sun } from "lucide-react";
+import { Building2, CalendarDays, LayoutDashboard, Moon, NotebookPen, Plus, Search, ShieldCheck, Star, Sun } from "lucide-react";
 import { endSession } from "@/lib/session";
 import type { LayoutId, SessionUser } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/types";
@@ -146,6 +146,18 @@ export function AppNavbar({
             </Link>
           )}
 
+          {user && (
+            <Link
+              to="/notes"
+              data-testid="notes-link"
+              aria-label="Notes and memos"
+              title="Notes & memos"
+              className="hidden h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
+            >
+              <NotebookPen className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          )}
+
           {isAdmin && (
             <Link
               to="/admin"
@@ -205,6 +217,9 @@ export function AppNavbar({
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/standby")} data-testid="user-menu-standby">
                   <CalendarDays className="h-4 w-4" aria-hidden="true" /> Standby calendar
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/notes")} data-testid="user-menu-notes">
+                  <NotebookPen className="h-4 w-4" aria-hidden="true" /> Notes & memos
                 </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem onClick={() => navigate("/admin")} data-testid="user-menu-admin">

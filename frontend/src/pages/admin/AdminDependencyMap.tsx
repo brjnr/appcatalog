@@ -5,7 +5,7 @@ import { Network, Share2 } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { InfraNavProvider, useInfraNav } from "@/lib/infraNav";
 import type { DependencyMapData } from "@/lib/types";
-import { slugify } from "@/lib/types";
+import { LOCATION_LABELS, SERVER_LOCATIONS, slugify } from "@/lib/types";
 import { ServerDrawer } from "@/components/catalog/ServerDrawer";
 import { PicDrawer } from "@/components/catalog/PicDrawer";
 import { Badge } from "@/components/ui/badge";
@@ -28,11 +28,33 @@ const PAD = 16;
 function AdminDependencyMap() {
   const { openServer } = useInfraNav();
   const [hover, setHover] = useState<string | null>(null);
+  const [location, setLocation] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data: raw, isLoading } = useQuery({
     queryKey: ["dependency-map"],
     queryFn: () => apiGet<DependencyMapData>("/dependency-map"),
   });
+
+  // Site filter: keep only servers on the chosen site, then the apps still linked.
+  const locationCounts = SERVER_LOCATIONS.map((site) => ({
+    site,
+    count: (raw?.servers ?? []).filter((server) => server.location === site).length,
+  }));
+
+  const data = useMemo<DependencyMapData | undefined>(() => {
+    if (!raw) return undefined;
+    if (!location) return raw;
+    const servers = raw.servers.filter((server) => server.location === location);
+    const serverIds = new Set(servers.map((server) => server.id));
+    const edges = raw.edges.filter((edge) => serverIds.has(edge.server_id));
+    const appIds = new Set(edges.map((edge) => edge.application_id));
+    return {
+      applications: raw.applications.filter((app) => appIds.has(app.id)),
+      servers,
+      edges,
+      shared_server_ids: raw.shared_server_ids.filter((id) => serverIds.has(id)),
+    };
+  }, [raw, location]);
 
   const layout = useMemo(() => {
     if (!data) return null;
@@ -76,6 +98,42 @@ function AdminDependencyMap() {
         <span data-testid="map-stat-shared" className="font-medium text-amber-600 dark:text-amber-400">
           {shared.size} shared server(s)
         </span>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-1.5" data-testid="map-location-filter">
+        <span className="mr-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Site
+        </span>
+        <button
+          type="button"
+          data-testid="map-location-all"
+          onClick={() => setLocation(null)}
+          className={cn(
+            "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
+            location === null
+              ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+              : "border-border text-muted-foreground hover:bg-muted",
+          )}
+        >
+          All ({raw?.servers.length ?? 0})
+        </button>
+        {locationCounts.map(({ site, count }) => (
+          <button
+            key={site}
+            type="button"
+            title={LOCATION_LABELS[site]}
+            data-testid={`map-location-${slugify(site)}`}
+            onClick={() => setLocation((prev) => (prev === site ? null : site))}
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
+              location === site
+                ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                : "border-border text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {site} ({count})
+          </button>
+        ))}
       </div>
 
       {isLoading ? (
