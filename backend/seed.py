@@ -1,15 +1,57 @@
-"""Seed the catalog with realistic enterprise applications.
+"""Seed the catalog: categories, users (RBAC), and applications.
 
 Run: cd /app/backend && python seed.py
-Idempotent: clears the apps collection, then re-inserts + re-applies indexes.
+Idempotent: clears apps/categories/users/sessions, then re-inserts + re-applies indexes.
+
+Seeded accounts (see memory/test_credentials.md):
+  admin@corp.com / admin123                       — Administrator (full access)
+  john.doe@corp.com / user123                     — Normal User (Security + Monitoring)
+  maria.garcia@corp.com / user123                 — Normal User (HR + Finance)
 """
 
 import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from lib.auth import hash_password
 from lib.db import db, ensure_indexes
 from models.catalog import AppCreate
+from models.users import LoginRequest  # noqa: F401  (sanity: models importable)
+
+CATEGORY_SEEDS = [
+    {"name": "Business", "icon": "Briefcase", "description": "Productivity, projects, and CRM."},
+    {"name": "Infrastructure", "icon": "Server", "description": "Compute, automation, and orchestration."},
+    {"name": "Network", "icon": "Network", "description": "Firewalls, routing, and DNS."},
+    {"name": "Security", "icon": "ShieldAlert", "description": "Access, threats, and compliance."},
+    {"name": "Monitoring", "icon": "Activity", "description": "Observability and alerting."},
+    {"name": "Data Center", "icon": "Database", "description": "Storage, backup, and HCI."},
+    {"name": "HR", "icon": "Users", "description": "People, hiring, and culture."},
+    {"name": "Finance", "icon": "DollarSign", "description": "ERP, spend, and planning."},
+]
+
+USER_SEEDS = [
+    {
+        "name": "Ada Admin",
+        "email": "admin@corp.com",
+        "password": "admin123",
+        "role": "administrator",
+        "assigned_category_ids": [],  # admins are unrestricted
+    },
+    {
+        "name": "John Doe",
+        "email": "john.doe@corp.com",
+        "password": "user123",
+        "role": "normal_user",
+        "assigned_categories": ["Security", "Monitoring"],
+    },
+    {
+        "name": "Maria Garcia",
+        "email": "maria.garcia@corp.com",
+        "password": "user123",
+        "role": "normal_user",
+        "assigned_categories": ["HR", "Finance"],
+    },
+]
 
 APPS = [
     # Business
@@ -99,10 +141,60 @@ async def seed() -> None:
     from lib.db import db, ensure_indexes
 
     now = datetime.now(timezone.utc)
+
+    # Fresh RBAC state: sessions first (they reference soon-to-change user ids).
+    await db.sessions.delete_many({})
+    await db.users.delete_many({})
+    await db.categories.delete_many({})
     await db.apps.delete_many({})
+
+    # Categories
+    category_ids: dict[str, str] = {}
+    for spec in CATEGORY_SEEDS:
+        category_id = str(uuid.uuid4())
+        category_ids[spec["name"]] = category_id
+        await db.categories.insert_one(
+            {
+                "id": category_id,
+                "name": spec["name"],
+                "description": spec.get("description", ""),
+                "icon": spec.get("icon", "Layers"),
+                "icon_url": None,
+                "status": "active",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+
+    # Users (passwords hashed — never stored in clear)
+    for spec in USER_SEEDS:
+        assigned = spec.get("assigned_categories", [])
+        await db.users.insert_one(
+            {
+                "id": str(uuid.uuid4()),
+                "name": spec["name"],
+                "email": spec["email"],
+                "role": spec["role"],
+                "assigned_category_ids": [category_ids[name] for name in assigned],
+                "is_active": True,
+                "password_hash": hash_password(spec["password"]),
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+
+    # Applications — mapped to category ids
     docs = []
     for i, spec in enumerate(APPS):
-        payload = AppCreate(**spec)
+        payload = AppCreate(
+            name=spec["name"],
+            description=spec["description"],
+            category_id=category_ids[spec["category"]],
+            environment=spec["environment"],
+            status=spec["status"],
+            url=spec["url"],
+            icon=spec["icon"],
+        )
         docs.append(
             {
                 **payload.model_dump(),
@@ -115,8 +207,12 @@ async def seed() -> None:
             }
         )
     await db.apps.insert_many(docs)
+
     await ensure_indexes()
-    print(f"Seeded {len(docs)} enterprise applications.")
+    print(
+        f"Seeded {len(CATEGORY_SEEDS)} categories, {len(USER_SEEDS)} users, "
+        f"{len(docs)} applications."
+    )
 
 
 if __name__ == "__main__":

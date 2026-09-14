@@ -6,16 +6,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-Category = Literal[
-    "Business",
-    "Infrastructure",
-    "Network",
-    "Security",
-    "Monitoring",
-    "Data Center",
-    "HR",
-    "Finance",
-]
 Environment = Literal["Production", "Staging", "Internal", "Cloud", "On-Premises"]
 Status = Literal["Active", "Maintenance", "Deprecated"]
 SortId = Literal[
@@ -29,12 +19,14 @@ SortId = Literal[
 
 
 class CatalogApp(BaseModel):
-    """A single enterprise application in the catalog."""
+    """A single enterprise application. category_name is resolved from the categories
+    collection on read; category_id is the stored reference."""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     description: str = ""
-    category: Category
+    category_id: str
+    category_name: str = ""
     environment: Environment = "Production"
     status: Status = "Active"
     url: str
@@ -56,7 +48,7 @@ class CatalogApp(BaseModel):
 class AppCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=2000)
-    category: Category
+    category_id: str = Field(min_length=1)
     environment: Environment = "Production"
     status: Status = "Active"
     url: str = Field(min_length=1, max_length=500)
@@ -66,7 +58,7 @@ class AppCreate(BaseModel):
 class AppUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=2000)
-    category: Category | None = None
+    category_id: str | None = None
     environment: Environment | None = None
     status: Status | None = None
     url: str | None = Field(default=None, min_length=1, max_length=500)

@@ -45,6 +45,17 @@ export const apiPatch = <T>(path: string, body?: JsonBody) =>
   request<T>("PATCH", path, body ?? null);
 export const apiDelete = <T>(path: string) => request<T>("DELETE", path);
 
+// Multipart upload (category icons). Lets the browser set the multipart Content-Type.
+export async function apiPostForm<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "POST", body: form });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null);
+    throw new ApiError(res.status, errBody);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
 // Human-readable message from any thrown error (FastAPI 422 detail arrays included).
 export function apiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {

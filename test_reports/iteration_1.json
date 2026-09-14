@@ -1,0 +1,110 @@
+{
+  "iteration": 1,
+  "mode": "generate",
+  "summary": "8/8 acceptance criteria exercised: 7 backend pytest files (all passed) + 8 named browser checks (all passed). No bugs found.",
+  "passed": 14,
+  "failed": 0,
+  "bugs": [],
+  "action_items": [],
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Login is required and rejects bad credentials",
+      "name": "test_tscheck_auth_and_scoping.py::test_login_rejects_bad_password / test_login_success_and_me",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/auth/login with wrong password -> 401; correct password -> 200 and GET /api/auth/me returns admin@corp.com"
+    },
+    {
+      "criterion": "Login is required and rejects bad credentials",
+      "name": "login-required-rejects-bad-credentials",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Visiting / redirected to /login; wrong password showed inline error and stayed on /login; correct password left /login and showed catalog"
+    },
+    {
+      "criterion": "Normal user sees ONLY applications in their assigned categories",
+      "name": "test_tscheck_auth_and_scoping.py::test_normal_user_scoped_to_11_apps",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/apps as john.doe@corp.com returned 11 items; no Workday HRIS/SAP S/4HANA ERP/Jira Software present"
+    },
+    {
+      "criterion": "Normal user sees ONLY applications in their assigned categories",
+      "name": "normal-user-scoped-catalog",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Catalog badge read 'of 11 applications'; CyberArk PAS visible; Workday HRIS/SAP S/4HANA ERP/Jira Software all absent (count 0)"
+    },
+    {
+      "criterion": "Backend denies a normal user who types an unauthorized app URL directly",
+      "name": "test_tscheck_authorization_denials.py::test_normal_user_denied_unassigned_app",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/apps/<HR app id> as john.doe@corp.com -> HTTP 403"
+    },
+    {
+      "criterion": "Backend denies a normal user who types an unauthorized app URL directly",
+      "name": "app-detail-denied-unauthorized-app",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Navigating to /app/<HR app id> as john rendered testid app-detail-denied; console showed the underlying 403 network response"
+    },
+    {
+      "criterion": "Normal user cannot reach the admin console or admin APIs",
+      "name": "test_tscheck_authorization_denials.py::test_normal_user_denied_admin_endpoints",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "As john: GET /api/users -> 403, POST /api/categories -> 403, POST /api/apps -> 403"
+    },
+    {
+      "criterion": "Normal user cannot reach the admin console or admin APIs",
+      "name": "admin-console-denied-for-normal-user",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "As john: admin-console-link absent from navbar; /admin rendered testid admin-denied"
+    },
+    {
+      "criterion": "Administrator has unrestricted access",
+      "name": "test_tscheck_admin_unrestricted.py::test_admin_sees_all_apps_and_stats",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "As admin: GET /api/apps returned 36 items; GET /api/users included all 3 seeded accounts; GET /api/categories included all 8 seeded categories"
+    },
+    {
+      "criterion": "Administrator has unrestricted access",
+      "name": "admin-unrestricted-access",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Catalog badge 'of 36 applications'; /admin dashboard stat-users-card=3, stat-categories-card=8, stat-applications-card=36; all six nav items (Dashboard/Users/Roles/App Categories/Applications/Access Management) visible"
+    },
+    {
+      "criterion": "Admin can create a user with a role and category assignments, and that scoping takes effect",
+      "name": "test_tscheck_admin_creates_scoped_user.py::test_admin_creates_scoped_user",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/users with role=normal_user, assigned_category_ids=[Finance] -> 200/201; subsequent login as new user -> GET /api/apps returned 4 items all category_name=Finance"
+    },
+    {
+      "criterion": "Admin can create a user with a role and category assignments, and that scoping takes effect",
+      "name": "admin-creates-scoped-user-ui",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Add User dialog created tscheck QA Person; new row showed role 'Normal User' + Finance badge; login as new user showed catalog badge 'of 4 applications'"
+    },
+    {
+      "criterion": "Admin can create a category with an uploaded custom icon, and the icon renders",
+      "name": "admin-category-icon-upload",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Created tscheck-Analytics-* category with uploaded PNG; card rendered <img src=/api/uploads/...> (HTTP 200 confirmed via page.request.get); Edit -> Remove -> Save reverted to lucide glyph (dialog and card <img> count 0)"
+    },
+    {
+      "criterion": "Access Management matrix assigns/unassigns categories and persists",
+      "name": "access-management-toggle-persists",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Ticking Business for maria.garcia@corp.com increased her 'Assigned' cell from 2 to 3 with a toast shown; reload kept aria-checked=true and count=3; unticking restored aria-checked=false and count=2"
+    }
+  ]
+}

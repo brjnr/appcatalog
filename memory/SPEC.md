@@ -1,33 +1,69 @@
-# Enterprise Application Catalog — Living Spec
+# Enterprise Application Catalog + RBAC — Living Spec
 
 ## What it is
-A centralized web portal where employees find and open every enterprise application:
-search → filter → sort → choose view → open. No login required.
+A centralized portal where employees find and open enterprise applications, with
+role-based access control: normal users see only the app categories assigned to them,
+administrators manage everything.
 
 ## Stack
-- Backend: FastAPI (`backend/server.py`, `backend/routers/apps.py`, `backend/models/catalog.py`), MongoDB collection `apps` (motor, string uuid4 ids). Seed: `cd /app/backend && python seed.py` (resets + reseeds 36 apps, idempotent).
-- Frontend: React 19 + Vite + Tailwind v4 + shadcn (base-nova/base-ui). Fonts: Space Grotesk (headings), DM Sans (body), JetBrains Mono (URLs/numbers). Light default + dark toggle (next-themes).
+- Backend: FastAPI. `backend/server.py` mounts routers on `api_router` (/api) and serves uploaded
+  category icons from `/api/uploads` (StaticFiles over `backend/uploads/`).
+  Routers: `routers/auth.py`, `routers/users.py`, `routers/categories.py`, `routers/apps.py`.
+  Models: `models/users.py`, `models/categories.py`, `models/catalog.py`. Auth helpers: `lib/auth.py`.
+- Frontend: React 19 + Vite + Tailwind v4 + shadcn (base-nova/base-ui). Fonts: Space Grotesk
+  (headings), DM Sans (body), JetBrains Mono. Light default + dark toggle (next-themes).
+- Mongo collections: `users`, `sessions`, `categories`, `apps`.
 
-## Data model (`CatalogApp`)
-id, name, description, category (8 fixed values), environment (Production/Staging/Internal/Cloud/On-Premises), status (Active/Maintenance/Deprecated), url, icon (lucide name), usage_count, favorite_count, created_at, updated_at (aware UTC).
+## Auth model
+- Login sets an **httpOnly cookie** (`catalog_session`, 7-day TTL) backed by the `sessions`
+  collection (TTL index on `expires_at`). Passwords hashed with passlib pbkdf2_sha256.
+- `GET /api/auth/me` returns the user or **null with 200** when logged out (so the SPA redirects
+  instead of erroring). `POST /api/auth/logout` clears the cookie + session row.
+- Frontend routes through `lib/session.ts`: `beginSession()` after login, `endSession()` on sign-out.
 
-## API (all under /api, registered on api_router)
-- `GET /apps` — optional `q` (name/description/category/environment), `category`, `environment`, `status`, `sort` (name_asc|name_desc|most_used|most_favorite|recently_added|recently_updated). Filtering server-side; the frontend fetches all and filters client-side for instant UX.
-- `GET /apps/{id}` · `POST /apps` (201) · `PUT /apps/{id}` · `DELETE /apps/{id}` (204)
-- `POST /apps/{id}/launch` — increments usage_count
-- `POST /apps/{id}/favorite` — body `{favorite: bool}`, increments/clamps favorite_count
+## Roles
+- `administrator` — unrestricted. Full CRUD on users/categories/apps, sees all applications.
+- `normal_user` — sees only apps whose `category_id` is in `assigned_category_ids`.
 
-## Frontend structure
-- `/` Home: AppNavbar (logo/title, search, favorites toggle, layout selector, theme, Add App, user dropdown) → HeroSearchSection (headline, big search, category pills, stats strip) → CatalogToolbar (count, environment/status/sort selects, reset) → 5 layouts.
-- Layouts: grid (marketplace cards), list (dense rows), alphabetical (A–Z groups + sticky jump bar), category (grouped chips), compact (dense tiles). Layout + sort persist in localStorage (`catalog.layout`, `catalog.sort`); favorites too (`catalog.favorites`, array of app ids — counts sync to backend).
-- `/app/:id` AppDetail: purpose description, badges, stats, **Open Application** (opens `app.url` in new tab + launch counter), favorite toggle, admin Edit/Delete (confirm dialog), related apps (same category).
+## Backend enforcement (not just hidden UI)
+- `require_user` (401 when no valid session), `require_admin` (403 for non-admins).
+- `GET /api/apps` injects `category_id: {$in: allowed}` for normal users.
+- `GET /api/apps/{id}`, `POST /apps/{id}/launch`, `POST /apps/{id}/favorite` → **403** if the app's
+  category is not assigned. Typing an app URL directly does not bypass this.
+- All mutations on `/apps`, `/users`, `/categories` are admin-only.
+- Deactivated users (`is_active: false`) have their sessions rejected on the next request.
+- Guards: cannot remove/deactivate the last administrator; cannot delete your own account;
+  cannot delete a category that still has applications (409).
 
-## Roles / auth
-No auth. Everyone is effectively a catalog editor (Add/Edit/Delete buttons visible); favorites are per-browser.
+## Data model
+- `AppCategory`: id, name (unique), description, icon (lucide name), icon_url (uploaded image or
+  null), status (active|inactive), created_at, updated_at.
+- `CatalogApp`: id, name, description, **category_id** (+ `category_name` resolved on read),
+  environment, status, url, icon, usage_count, favorite_count, created_at, updated_at.
+- `UserOut`: id, name, email, role, assigned_category_ids[], is_active. Password hash never leaves
+  the backend.
 
-## Seed data
-36 realistic enterprise apps (Jira, Grafana, Okta, Veeam, Workday, SAP, …) across all 8 categories, with usage/favorite counts, staggered created_at/updated_at, and 2 non-Active apps (Pure Storage = Maintenance, Zabbix = Deprecated) for status-filter testing.
+## Category icons
+`POST /api/categories/{id}/icon` (multipart, PNG/JPEG/WebP/SVG, ≤2 MB) → saves to
+`backend/uploads/{id}.{ext}` and sets `icon_url`. `DELETE .../icon` removes it and falls back to the
+lucide glyph. `CategoryIcon` component renders the uploaded image everywhere a category appears.
+
+## Frontend routes
+- `/login` — sign in (demo accounts listed on the page).
+- `/` — catalog: navbar (search, favorites, layout selector, theme, admin link, profile menu),
+  hero search + dynamic category pills, toolbar (count, environment/status/sort), 5 layouts
+  (grid, list, alphabetical + A–Z jump bar, category, compact). Layout/sort/favorites persist in
+  localStorage (`catalog.layout`, `catalog.sort`, `catalog.favorites`).
+- `/app/:id` — detail: purpose, badges, stats, Open Application (new tab + launch counter),
+  favorite, admin-only Edit/Delete, related apps. Shows an **Access denied** state on 403.
+- `/admin` (administrator only, guarded in `AdminLayout`): `index` Dashboard, `users`, `roles`,
+  `categories`, `applications`, `access` (user × category matrix).
+
+## Seed data (`cd /app/backend && python seed.py`)
+8 categories, 3 users, 36 applications. Idempotent (clears sessions/users/categories/apps first).
+Credentials in `memory/test_credentials.md`.
 
 ## Notes
-- Search matches name, description, category, environment (server regex escaped; client substring).
-- Sorting is stable with name as tiebreaker; dates are ISO strings (UTC) — lexicographic sort is safe.
+- base-ui gotchas hit here: `Menu.Item` fires **onClick** (not `onSelect`), and
+  `DropdownMenuLabel` (GroupLabel) requires `Menu.Group` context — use a plain div instead.
+- Session cookies are bound to the origin: browser tests must use the preview URL, not localhost.

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -7,13 +7,14 @@ import {
   ArrowUpRight,
   MousePointerClick,
   Pencil,
+  ShieldBan,
   Star,
   Trash2,
 } from "lucide-react";
-import { apiDelete, apiErrorMessage, apiGet, apiPost } from "@/lib/api";
+import { ApiError, apiDelete, apiErrorMessage, apiGet, apiPost } from "@/lib/api";
 import { formatDate, formatCount } from "@/lib/format";
 import { useFavorites } from "@/lib/prefs";
-import { slugify, type CatalogApp } from "@/lib/types";
+import { slugify, type CatalogApp, type SessionUser } from "@/lib/types";
 import { AppNavbar } from "@/components/catalog/AppNavbar";
 import { AppIcon } from "@/components/catalog/AppIcon";
 import { EnvironmentBadge, StatusBadge } from "@/components/catalog/StatusBadge";
@@ -26,15 +27,27 @@ import { Card } from "@/components/ui/card";
 export default function AppDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { favorites, toggle: toggleFavoriteLocal } = useFavorites();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const { data: app, isLoading, isError } = useQuery({
+  const { data: user, isLoading: authLoading } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => apiGet<SessionUser | null>("/auth/me"),
+    retry: false,
+  });
+
+  const {
+    data: app,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ["apps", id],
     queryFn: () => apiGet<CatalogApp>(`/apps/${id}`),
-    enabled: Boolean(id),
+    enabled: Boolean(id && user),
     retry: false,
   });
 
@@ -42,12 +55,13 @@ export default function AppDetail() {
   const { data: allApps } = useQuery({
     queryKey: ["apps"],
     queryFn: () => apiGet<CatalogApp[]>("/apps"),
+    enabled: Boolean(user),
   });
 
   const related = useMemo(() => {
     if (!app || !allApps) return [];
     return allApps
-      .filter((candidate) => candidate.category === app.category && candidate.id !== app.id)
+      .filter((candidate) => candidate.category_id === app.category_id && candidate.id !== app.id)
       .sort((a, b) => b.usage_count - a.usage_count)
       .slice(0, 4);
   }, [app, allApps]);
@@ -61,7 +75,7 @@ export default function AppDetail() {
     mutationFn: ({ id: appId, favorite }: { id: string; favorite: boolean }) =>
       apiPost<CatalogApp>(`/apps/${appId}/favorite`, { favorite }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["apps"] }),
-    onError: (error) => toast.error(apiErrorMessage(error)),
+    onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
   const deleteMutation = useMutation({
@@ -71,7 +85,7 @@ export default function AppDetail() {
       toast.success("Application deleted");
       navigate("/");
     },
-    onError: (error) => toast.error(apiErrorMessage(error)),
+    onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
   const handleLaunch = (target: CatalogApp) => {
@@ -88,9 +102,16 @@ export default function AppDetail() {
 
   const favorite = app ? favorites.has(app.id) : false;
 
+  // Not signed in → login.
+  if (!authLoading && !user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  const denied = isError && error instanceof ApiError && error.status === 403;
+
   return (
     <div className="min-h-svh">
-      <AppNavbar />
+      <AppNavbar user={user ?? null} />
       <main className="mx-auto max-w-5xl px-4 pb-20 pt-8 sm:px-6 lg:px-8">
         <Link
           to="/"
@@ -100,10 +121,25 @@ export default function AppDetail() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to catalog
         </Link>
 
-        {isLoading ? (
+        {authLoading || (isLoading && !denied) ? (
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]" data-testid="app-detail-loading">
             <div className="h-64 animate-pulse rounded-xl border bg-muted/40" />
             <div className="h-64 animate-pulse rounded-xl border bg-muted/40" />
+          </div>
+        ) : denied ? (
+          <div
+            data-testid="app-detail-denied"
+            className="mt-16 flex flex-col items-center gap-3 text-center"
+          >
+            <ShieldBan className="h-10 w-10 text-red-500" aria-hidden="true" />
+            <p className="font-medium text-foreground">Access denied</p>
+            <p className="max-w-md text-sm text-muted-foreground">
+              This application belongs to a category that has not been assigned to you. Ask an
+              administrator if you need access.
+            </p>
+            <Link to="/" className={buttonVariants({ variant: "outline" })}>
+              Back to catalog
+            </Link>
           </div>
         ) : isError || !app ? (
           <div
@@ -138,7 +174,7 @@ export default function AppDetail() {
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <Badge variant="secondary" data-testid="detail-category-badge">
-                        {app.category}
+                        {app.category_name}
                       </Badge>
                       <EnvironmentBadge environment={app.environment} />
                       <StatusBadge status={app.status} />
@@ -208,30 +244,32 @@ export default function AppDetail() {
                     </div>
                   </dl>
 
-                  <div className="mt-4 flex gap-2 border-t pt-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      data-testid="app-detail-edit-btn"
-                      onClick={() => setEditOpen(true)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Edit
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      data-testid="app-detail-delete-btn"
-                      onClick={() => setDeleteOpen(true)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
-                    </Button>
-                  </div>
+                  {user?.role === "administrator" && (
+                    <div className="mt-4 flex gap-2 border-t pt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-testid="app-detail-edit-btn"
+                        onClick={() => setEditOpen(true)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Edit
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        data-testid="app-detail-delete-btn"
+                        onClick={() => setDeleteOpen(true)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
+                      </Button>
+                    </div>
+                  )}
                 </Card>
 
                 {related.length > 0 && (
                   <Card className="p-5">
                     <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      More in {app.category}
+                      More in {app.category_name}
                     </h2>
                     <div className="mt-3 flex flex-col gap-1">
                       {related.map((candidate) => (

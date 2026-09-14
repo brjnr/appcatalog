@@ -1,11 +1,18 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Plus, SearchX, ServerCrash } from "lucide-react";
 import { apiErrorMessage, apiGet, apiPost } from "@/lib/api";
 import { useFavorites, usePersistedState } from "@/lib/prefs";
-import type { CatalogApp, CardActions, LayoutId, SortId } from "@/lib/types";
+import type {
+  AppCategory,
+  CardActions,
+  CatalogApp,
+  LayoutId,
+  SessionUser,
+  SortId,
+} from "@/lib/types";
 import { AppNavbar } from "@/components/catalog/AppNavbar";
 import { HeroSearchSection, type HeroStats } from "@/components/catalog/HeroSearchSection";
 import { CatalogToolbar } from "@/components/catalog/CatalogToolbar";
@@ -20,16 +27,30 @@ import { Button } from "@/components/ui/button";
 export default function Home() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Catalog data — the page shell (nav, hero, filters) renders even if this fetch fails.
+  // Session — the backend scopes /api/apps to this user's assigned categories.
+  const { data: user, isLoading: authLoading } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => apiGet<SessionUser | null>("/auth/me"),
+    retry: false,
+  });
+
   const { data: apps, isLoading, isError, refetch } = useQuery({
     queryKey: ["apps"],
     queryFn: () => apiGet<CatalogApp[]>("/apps"),
+    enabled: Boolean(user),
+  });
+
+  const { data: categories } = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => apiGet<AppCategory[]>("/categories"),
+    enabled: Boolean(user),
   });
 
   // Filters (session) + layout/sort (persisted across visits).
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
+  const [categoryId, setCategoryId] = useState("All");
   const [environment, setEnvironment] = useState("All");
   const [status, setStatus] = useState("All");
   const [sort, setSort] = usePersistedState<SortId>("catalog.sort", "name_asc");
@@ -72,12 +93,12 @@ export default function Home() {
     const all = apps ?? [];
     const q = search.trim().toLowerCase();
     const list = all.filter((app) => {
-      if (category !== "All" && app.category !== category) return false;
+      if (categoryId !== "All" && app.category_id !== categoryId) return false;
       if (environment !== "All" && app.environment !== environment) return false;
       if (status !== "All" && app.status !== status) return false;
       if (favoritesOnly && !favorites.has(app.id)) return false;
       if (q) {
-        const haystack = `${app.name} ${app.description} ${app.category} ${app.environment}`;
+        const haystack = `${app.name} ${app.description} ${app.category_name} ${app.environment}`;
         if (!haystack.toLowerCase().includes(q)) return false;
       }
       return true;
@@ -92,9 +113,7 @@ export default function Home() {
         sorted.sort((a, b) => b.usage_count - a.usage_count || a.name.localeCompare(b.name));
         break;
       case "most_favorite":
-        sorted.sort(
-          (a, b) => b.favorite_count - a.favorite_count || a.name.localeCompare(b.name),
-        );
+        sorted.sort((a, b) => b.favorite_count - a.favorite_count || a.name.localeCompare(b.name));
         break;
       case "recently_added":
         sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -106,7 +125,7 @@ export default function Home() {
         sorted.sort((a, b) => a.name.localeCompare(b.name));
     }
     return sorted;
-  }, [apps, search, category, environment, status, favoritesOnly, favorites, sort]);
+  }, [apps, search, categoryId, environment, status, favoritesOnly, favorites, sort]);
 
   const stats = useMemo<HeroStats | null>(() => {
     if (!apps) return null;
@@ -120,19 +139,29 @@ export default function Home() {
   }, [apps]);
 
   const filtersActive =
-    category !== "All" || environment !== "All" || status !== "All" || favoritesOnly || search.trim() !== "";
+    categoryId !== "All" ||
+    environment !== "All" ||
+    status !== "All" ||
+    favoritesOnly ||
+    search.trim() !== "";
 
   const clearFilters = () => {
     setSearch("");
-    setCategory("All");
+    setCategoryId("All");
     setEnvironment("All");
     setStatus("All");
     setFavoritesOnly(false);
   };
 
+  // Not signed in → login (the whole catalog is behind auth; the backend enforces it too).
+  if (!authLoading && !user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
   return (
     <div className="min-h-svh">
       <AppNavbar
+        user={user ?? null}
         search={search}
         onSearchChange={setSearch}
         favoritesOnly={favoritesOnly}
@@ -145,8 +174,9 @@ export default function Home() {
       <HeroSearchSection
         search={search}
         onSearchChange={setSearch}
-        category={category}
-        onCategoryChange={setCategory}
+        categoryId={categoryId}
+        onCategoryChange={setCategoryId}
+        categories={categories ?? []}
         stats={stats}
       />
 
@@ -191,13 +221,17 @@ export default function Home() {
           </div>
         ) : (apps?.length ?? 0) === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center">
-            <p className="font-medium text-foreground">The catalog is empty</p>
+            <p className="font-medium text-foreground">No applications available</p>
             <p className="text-sm text-muted-foreground">
-              Register your first application to get started.
+              {user?.role === "administrator"
+                ? "Register your first application to get started."
+                : "No applications have been assigned to your categories yet — ask an administrator."}
             </p>
-            <Button onClick={() => setFormOpen(true)} data-testid="empty-catalog-add-btn">
-              <Plus className="h-4 w-4" aria-hidden="true" /> Add application
-            </Button>
+            {user?.role === "administrator" && (
+              <Button onClick={() => setFormOpen(true)} data-testid="empty-catalog-add-btn">
+                <Plus className="h-4 w-4" aria-hidden="true" /> Add application
+              </Button>
+            )}
           </div>
         ) : filtered.length === 0 ? (
           <div

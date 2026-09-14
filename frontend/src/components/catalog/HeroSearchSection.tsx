@@ -1,8 +1,9 @@
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { formatCount } from "@/lib/format";
-import { CATEGORIES, slugify } from "@/lib/types";
+import type { AppCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { CategoryIcon } from "./CategoryIcon";
 
 export interface HeroStats {
   total: number;
@@ -14,8 +15,9 @@ export interface HeroStats {
 interface HeroSearchSectionProps {
   search: string;
   onSearchChange: (value: string) => void;
-  category: string;
+  categoryId: string; // "All" or a category id
   onCategoryChange: (value: string) => void;
+  categories: AppCategory[];
   stats: HeroStats | null;
 }
 
@@ -23,8 +25,9 @@ interface HeroSearchSectionProps {
 export function HeroSearchSection({
   search,
   onSearchChange,
-  category,
+  categoryId,
   onCategoryChange,
+  categories,
   stats,
 }: HeroSearchSectionProps) {
   return (
@@ -62,21 +65,43 @@ export function HeroSearchSection({
         </div>
 
         <nav aria-label="Categories" className="mt-5 flex flex-wrap gap-2">
-          {["All", ...CATEGORIES].map((cat) => (
+          <button
+            type="button"
+            data-testid="category-pill-all"
+            aria-pressed={categoryId === "All"}
+            onClick={() => onCategoryChange("All")}
+            className={cn(
+              "rounded-full px-3.5 py-1.5 text-sm font-medium transition-[background-color,color] duration-150",
+              categoryId === "All"
+                ? "bg-sky-600 text-white shadow-sm"
+                : "bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white",
+            )}
+          >
+            All
+          </button>
+          {categories.map((category) => (
             <button
-              key={cat}
+              key={category.id}
               type="button"
-              data-testid={`category-pill-${slugify(cat)}`}
-              aria-pressed={category === cat}
-              onClick={() => onCategoryChange(cat)}
+              data-testid={`category-pill-${slug(category)}`}
+              aria-pressed={categoryId === category.id}
+              onClick={() => onCategoryChange(category.id)}
               className={cn(
-                "rounded-full px-3.5 py-1.5 text-sm font-medium transition-[background-color,color] duration-150",
-                category === cat
+                "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-[background-color,color] duration-150",
+                categoryId === category.id
                   ? "bg-sky-600 text-white shadow-sm"
                   : "bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white",
               )}
             >
-              {cat}
+              <CategoryIcon
+                icon={category.icon}
+                iconUrl={category.icon_url}
+                className={cn(
+                  "h-4 w-4",
+                  categoryId === category.id ? "text-white" : "text-slate-400",
+                )}
+              />
+              {category.name}
             </button>
           ))}
         </nav>
@@ -120,4 +145,11 @@ export function HeroSearchSection({
       </div>
     </section>
   );
+}
+
+function slug(category: AppCategory): string {
+  return category.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }

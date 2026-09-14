@@ -59,7 +59,7 @@ export function AppCardGrid({
         <p className="font-mono text-[11px] text-muted-foreground">{hostnameOf(app.url)}</p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <Badge variant="secondary" className="text-[11px]">
-            {app.category}
+            {app.category_name}
           </Badge>
           <StatusBadge status={app.status} />
         </div>

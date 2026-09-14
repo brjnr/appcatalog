@@ -60,10 +60,23 @@ async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
 
+from fastapi.staticfiles import StaticFiles
+
+from routers.auth import router as auth_router
+from routers.users import router as users_router
+from routers.categories import router as categories_router
 from routers.apps import router as apps_router
 
 # Include feature routers on the /api router
+api_router.include_router(auth_router)
+api_router.include_router(users_router)
+api_router.include_router(categories_router)
 api_router.include_router(apps_router)
+
+# Uploaded category icons live on disk and are served under /api/uploads (proxied by Vite).
+UPLOADS_DIR = ROOT_DIR / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
+app.mount("/api/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 # Include the router in the main app
 app.include_router(api_router)

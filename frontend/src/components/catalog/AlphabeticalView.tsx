@@ -90,7 +90,7 @@ export function AlphabeticalView({ apps, onOpenDetail, onLaunch }: AlphabeticalV
                     {app.name}
                   </h3>
                   <Badge variant="secondary" className="hidden shrink-0 sm:inline-flex">
-                    {app.category}
+                    {app.category_name}
                   </Badge>
                   <StatusBadge status={app.status} className="hidden shrink-0 md:inline-flex" />
                   <Button

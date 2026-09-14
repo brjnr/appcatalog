@@ -1,8 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { apiErrorMessage, apiPost, apiPut } from "@/lib/api";
-import { CATEGORIES, ENVIRONMENTS, STATUSES, type CatalogApp } from "@/lib/types";
+import { apiErrorMessage, apiGet, apiPost, apiPut } from "@/lib/api";
+import {
+  ENVIRONMENTS,
+  STATUSES,
+  type AppCategory,
+  type CatalogApp,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,7 +38,7 @@ interface AppFormDialogProps {
 interface AppFormPayload {
   name: string;
   description: string;
-  category: string;
+  category_id: string;
   environment: string;
   status: string;
   url: string;
@@ -46,10 +51,17 @@ export function AppFormDialog({ open, onOpenChange, initial }: AppFormDialogProp
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("Business");
+  const [categoryId, setCategoryId] = useState("");
   const [environment, setEnvironment] = useState("Production");
   const [status, setStatus] = useState("Active");
   const [icon, setIcon] = useState("AppWindow");
+
+  // Admins pick from all categories (including inactive) when assigning an app.
+  const { data: categories } = useQuery({
+    queryKey: ["categories", "admin"],
+    queryFn: () => apiGet<AppCategory[]>("/categories?include_inactive=true"),
+    enabled: open,
+  });
 
   // Reset the fields each time the dialog opens (create vs prefilled edit).
   useEffect(() => {
@@ -57,7 +69,7 @@ export function AppFormDialog({ open, onOpenChange, initial }: AppFormDialogProp
     setName(initial?.name ?? "");
     setUrl(initial?.url ?? "");
     setDescription(initial?.description ?? "");
-    setCategory(initial?.category ?? "Business");
+    setCategoryId(initial?.category_id ?? "");
     setEnvironment(initial?.environment ?? "Production");
     setStatus(initial?.status ?? "Active");
     setIcon(initial?.icon ?? "AppWindow");
@@ -84,6 +96,10 @@ export function AppFormDialog({ open, onOpenChange, initial }: AppFormDialogProp
       toast.error("Application name is required");
       return;
     }
+    if (!categoryId) {
+      toast.error("Choose a category for this application");
+      return;
+    }
     try {
       const parsed = new URL(trimmedUrl);
       if (!/^https?:$/.test(parsed.protocol)) throw new Error("bad protocol");
@@ -95,7 +111,7 @@ export function AppFormDialog({ open, onOpenChange, initial }: AppFormDialogProp
       name: trimmedName,
       description: description.trim(),
       url: trimmedUrl,
-      category,
+      category_id: categoryId,
       environment,
       status,
       icon,
@@ -143,23 +159,24 @@ export function AppFormDialog({ open, onOpenChange, initial }: AppFormDialogProp
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="app-form-category">Category</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger id="app-form-category" data-testid="admin-form-category-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="app-form-category">Category</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger id="app-form-category" data-testid="admin-form-category-select">
+                <SelectValue placeholder="Choose a category" />
+              </SelectTrigger>
+              <SelectContent>
+                {(categories ?? []).map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                    {category.status === "inactive" ? " (inactive)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label htmlFor="app-form-environment">Environment</Label>
               <Select value={environment} onValueChange={setEnvironment}>
@@ -191,22 +208,22 @@ export function AppFormDialog({ open, onOpenChange, initial }: AppFormDialogProp
                 </SelectContent>
               </Select>
             </div>
+          </div>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="app-form-icon">Icon</Label>
-              <Select value={icon} onValueChange={setIcon}>
-                <SelectTrigger id="app-form-icon" data-testid="admin-form-icon-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ICON_OPTIONS.map((name) => (
-                    <SelectItem key={name} value={name}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="app-form-icon">Icon</Label>
+            <Select value={icon} onValueChange={setIcon}>
+              <SelectTrigger id="app-form-icon" data-testid="admin-form-icon-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ICON_OPTIONS.map((iconName) => (
+                  <SelectItem key={iconName} value={iconName}>
+                    {iconName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid gap-1.5">
@@ -235,11 +252,7 @@ export function AppFormDialog({ open, onOpenChange, initial }: AppFormDialogProp
               disabled={saveMutation.isPending}
               data-testid="admin-app-form-submit-btn"
             >
-              {saveMutation.isPending
-                ? "Saving…"
-                : initial
-                  ? "Save changes"
-                  : "Add application"}
+              {saveMutation.isPending ? "Saving…" : initial ? "Save changes" : "Add application"}
             </Button>
           </DialogFooter>
         </form>

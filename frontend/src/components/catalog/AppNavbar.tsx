@@ -1,21 +1,23 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { Building2, Moon, Plus, Search, Star, Sun } from "lucide-react";
+import { Building2, LayoutDashboard, Moon, Plus, Search, ShieldCheck, Star, Sun } from "lucide-react";
+import { endSession } from "@/lib/session";
+import type { LayoutId, SessionUser } from "@/lib/types";
+import { ROLE_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { LayoutId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { LayoutSelector } from "./LayoutSelector";
 
 interface AppNavbarProps {
+  user?: SessionUser | null;
   search?: string;
   onSearchChange?: (value: string) => void;
   favoritesOnly?: boolean;
@@ -26,8 +28,9 @@ interface AppNavbarProps {
 }
 
 // Fixed top bar: logo + title, quick search, favorites toggle, layout selector,
-// theme toggle, admin "Add App", user profile. Catalog controls only render on home.
+// theme toggle, admin entry points, and the signed-in user's profile menu.
 export function AppNavbar({
+  user,
   search,
   onSearchChange,
   favoritesOnly,
@@ -37,7 +40,17 @@ export function AppNavbar({
   onAddApp,
 }: AppNavbarProps) {
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const isDark = theme === "dark";
+  const isAdmin = user?.role === "administrator";
+  const initials =
+    (user?.name ?? "")
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "U";
 
   return (
     <header
@@ -121,7 +134,19 @@ export function AppNavbar({
             )}
           </Button>
 
-          {onAddApp !== undefined && (
+          {isAdmin && (
+            <Link
+              to="/admin"
+              data-testid="admin-console-link"
+              aria-label="Admin console"
+              title="Admin console"
+              className="hidden h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
+            >
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          )}
+
+          {isAdmin && onAddApp !== undefined && (
             <Button
               size="sm"
               onClick={onAddApp}
@@ -132,36 +157,56 @@ export function AppNavbar({
             </Button>
           )}
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  data-testid="user-profile-menu"
-                  aria-label="User profile"
-                  className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-white ring-offset-2 transition-[box-shadow] hover:ring-2 hover:ring-sky-400 dark:bg-sky-600"
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    data-testid="user-profile-menu"
+                    aria-label="User profile"
+                    title={`${user.name} — ${ROLE_LABELS[user.role]}`}
+                    className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-white ring-offset-2 transition-[box-shadow] hover:ring-2 hover:ring-sky-400 dark:bg-sky-600"
+                  >
+                    {initials}
+                  </button>
+                }
+              />
+              <DropdownMenuContent align="end" className="w-60">
+                <div className="px-2 py-1.5">
+                  <span className="block text-sm font-semibold" data-testid="user-menu-name">
+                    {user.name}
+                  </span>
+                  <span className="block text-xs font-normal text-muted-foreground" data-testid="user-menu-email">
+                    {user.email}
+                  </span>
+                  <span
+                    data-testid="user-menu-role"
+                    className="mt-1 inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:border-sky-900 dark:bg-sky-950/60 dark:text-sky-300"
+                  >
+                    {ROLE_LABELS[user.role]}
+                  </span>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate("/")} data-testid="user-menu-catalog">
+                  <LayoutDashboard className="h-4 w-4" aria-hidden="true" /> Catalog
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => navigate("/admin")} data-testid="user-menu-admin">
+                    <ShieldCheck className="h-4 w-4" aria-hidden="true" /> Admin console
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => void endSession()}
+                  data-testid="signout-item"
                 >
-                  EU
-                </button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>
-                <span className="block text-sm font-semibold">Enterprise User</span>
-                <span className="block text-xs font-normal text-muted-foreground">
-                  employee@corp.com
-                </span>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>Profile & preferences</DropdownMenuItem>
-              <DropdownMenuItem disabled>Admin console</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                Signed in via company SSO. Favorites and layout preferences are saved on this
-                device.
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
     </header>

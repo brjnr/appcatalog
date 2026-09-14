@@ -1,10 +1,10 @@
-// Hand-written mirrors of the backend Pydantic models (backend/models/catalog.py).
-// Nothing infers across the Python boundary — keep this in sync with that file.
+// Hand-written mirrors of the backend Pydantic models (backend/models/) — keep in sync.
 export interface CatalogApp {
   id: string;
   name: string;
   description: string;
-  category: string;
+  category_id: string;
+  category_name: string;
   environment: string;
   status: string;
   url: string;
@@ -15,16 +15,33 @@ export interface CatalogApp {
   updated_at: string;
 }
 
-export const CATEGORIES = [
-  "Business",
-  "Infrastructure",
-  "Network",
-  "Security",
-  "Monitoring",
-  "Data Center",
-  "HR",
-  "Finance",
-] as const;
+export interface AppCategory {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  icon_url: string | null;
+  status: string; // "active" | "inactive"
+  created_at: string;
+  updated_at: string;
+}
+
+export type Role = "administrator" | "normal_user";
+
+// Mirror of backend UserOut — also used for the /auth/me session payload and user lists.
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  assigned_category_ids: string[];
+  is_active: boolean;
+}
+
+export const ROLE_LABELS: Record<string, string> = {
+  administrator: "Administrator",
+  normal_user: "Normal User",
+};
 
 export const ENVIRONMENTS = [
   "Production",
@@ -35,6 +52,8 @@ export const ENVIRONMENTS = [
 ] as const;
 
 export const STATUSES = ["Active", "Maintenance", "Deprecated"] as const;
+
+export const CATEGORY_STATUSES = ["active", "inactive"] as const;
 
 export type LayoutId = "grid" | "list" | "alphabetical" | "category" | "compact";
 

@@ -46,7 +46,7 @@ export function AppCardList({
       </div>
 
       <Badge variant="secondary" className="hidden shrink-0 md:inline-flex">
-        {app.category}
+        {app.category_name}
       </Badge>
       <EnvironmentBadge environment={app.environment} className="hidden shrink-0 lg:inline-flex" />
       <StatusBadge status={app.status} className="hidden shrink-0 sm:inline-flex" />

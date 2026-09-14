@@ -21,11 +21,24 @@ INDEXES: dict[str, list[IndexModel]] = {
     "status_checks": [IndexModel([("timestamp", DESCENDING)], name="timestamp_desc")],
     "apps": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
-        IndexModel([("category", ASCENDING), ("name", ASCENDING)], name="category_name"),
+        IndexModel([("category_id", ASCENDING)], name="category_id"),
         IndexModel([("usage_count", DESCENDING)], name="usage_desc"),
         IndexModel([("favorite_count", DESCENDING)], name="favorites_desc"),
         IndexModel([("created_at", DESCENDING)], name="created_desc"),
         IndexModel([("updated_at", DESCENDING)], name="updated_desc"),
+    ],
+    "categories": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("name", ASCENDING)], name="name", unique=True),
+    ],
+    "users": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("email", ASCENDING)], name="email", unique=True),
+    ],
+    # token lookup per request; TTL index purges expired sessions at their expiry time
+    "sessions": [
+        IndexModel([("token", ASCENDING)], name="token", unique=True),
+        IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),
     ],
 }
 
