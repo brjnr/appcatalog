@@ -137,6 +137,125 @@ APPS = [
 ]
 
 
+SERVER_SEEDS = [
+    {"name": "SEC-PROD-01", "hostname": "security-prod-01", "ip_address": "10.10.10.101", "vm_name": "SEC-PROD01",
+     "os": "Ubuntu Server", "os_version": "22.04 LTS", "server_type": "Virtual Machine", "environment": "Production",
+     "status": "Active", "cpu": "8 Core", "ram": "32 GB", "storage": "500 GB SSD", "datacenter": "Jakarta DC1",
+     "cluster": "PROD-CLUSTER-A", "virtualization": "VMware vSphere 8",
+     "description": "Primary application node for privileged access and SIEM collectors.",
+     "apps": ["CyberArk PAS", "Splunk Enterprise SIEM"], "pics": ["Jane Smith", "Andi Pratama"]},
+    {"name": "SEC-PROD-02", "hostname": "security-prod-02", "ip_address": "10.10.10.102", "vm_name": "SEC-PROD02",
+     "os": "Ubuntu Server", "os_version": "22.04 LTS", "server_type": "Virtual Machine", "environment": "Production",
+     "status": "Active", "cpu": "8 Core", "ram": "32 GB", "storage": "500 GB SSD", "datacenter": "Jakarta DC1",
+     "cluster": "PROD-CLUSTER-A", "virtualization": "VMware vSphere 8",
+     "description": "Secondary security node providing HA failover for the vault and EDR console.",
+     "apps": ["HashiCorp Vault", "CrowdStrike Falcon"], "pics": ["Jane Smith"]},
+    {"name": "SEC-DB-01", "hostname": "security-db-01", "ip_address": "10.10.10.110", "vm_name": "SECDB01",
+     "os": "Red Hat Enterprise Linux", "os_version": "9.3", "server_type": "Database Server", "environment": "Production",
+     "status": "Active", "cpu": "16 Core", "ram": "64 GB", "storage": "2 TB NVMe", "datacenter": "Jakarta DC1",
+     "cluster": "DB-CLUSTER-01", "virtualization": "Bare Metal",
+     "description": "PostgreSQL cluster storing audit trails and credential vault metadata.",
+     "apps": ["CyberArk PAS", "Tenable Nessus"], "pics": ["Andi Pratama"]},
+    {"name": "MON-PROD-01", "hostname": "monitor-prod-01", "ip_address": "10.10.20.101", "vm_name": "MONPROD01",
+     "os": "Debian", "os_version": "12", "server_type": "Virtual Machine", "environment": "Production",
+     "status": "Active", "cpu": "12 Core", "ram": "48 GB", "storage": "1 TB SSD", "datacenter": "Jakarta DC1",
+     "cluster": "PROD-CLUSTER-B", "virtualization": "VMware vSphere 8",
+     "description": "Observability stack host running dashboards and the metric scrapers.",
+     "apps": ["Grafana Enterprise", "Prometheus & Alertmanager"], "pics": ["Jane Smith", "Siti Rahayu"]},
+    {"name": "MON-PROD-02", "hostname": "monitor-prod-02", "ip_address": "10.10.20.102", "vm_name": "MONPROD02",
+     "os": "Debian", "os_version": "12", "server_type": "Virtual Machine", "environment": "Production",
+     "status": "Maintenance", "cpu": "8 Core", "ram": "32 GB", "storage": "1 TB SSD", "datacenter": "Bandung DC2",
+     "cluster": "PROD-CLUSTER-B", "virtualization": "VMware vSphere 8",
+     "description": "APM and tracing collector node. Currently under scheduled kernel patching.",
+     "apps": ["Dynatrace OneAgent", "Zabbix Infrastructure"], "pics": ["Siti Rahayu"]},
+    {"name": "INF-VC-01", "hostname": "vcenter-01", "ip_address": "10.10.30.11", "vm_name": "VCSA01",
+     "os": "VMware Photon OS", "os_version": "5.0", "server_type": "Appliance", "environment": "Production",
+     "status": "Active", "cpu": "8 Core", "ram": "28 GB", "storage": "800 GB", "datacenter": "Jakarta DC1",
+     "cluster": "MGMT-CLUSTER", "virtualization": "VMware vSphere 8",
+     "description": "vCenter Server Appliance managing all production ESXi hosts.",
+     "apps": ["VMware vCenter"], "pics": ["Budi Santoso"]},
+    {"name": "INF-K8S-01", "hostname": "openshift-master-01", "ip_address": "10.10.30.21", "vm_name": "OCPM01",
+     "os": "Red Hat CoreOS", "os_version": "4.15", "server_type": "Control Plane", "environment": "Production",
+     "status": "Active", "cpu": "16 Core", "ram": "64 GB", "storage": "1 TB NVMe", "datacenter": "Jakarta DC1",
+     "cluster": "OCP-PROD", "virtualization": "Bare Metal",
+     "description": "OpenShift control-plane node hosting the API server and etcd.",
+     "apps": ["Kubernetes OpenShift", "Terraform Enterprise"], "pics": ["Budi Santoso", "Andi Pratama"]},
+    {"name": "INF-AUTO-01", "hostname": "ansible-tower-01", "ip_address": "10.10.30.31", "vm_name": "AWX01",
+     "os": "Red Hat Enterprise Linux", "os_version": "9.3", "server_type": "Virtual Machine", "environment": "Internal",
+     "status": "Active", "cpu": "8 Core", "ram": "24 GB", "storage": "400 GB SSD", "datacenter": "Jakarta DC1",
+     "cluster": "MGMT-CLUSTER", "virtualization": "VMware vSphere 8",
+     "description": "Automation controller executing playbooks and patch pipelines.",
+     "apps": ["Red Hat Ansible Tower"], "pics": ["Budi Santoso"]},
+    {"name": "NET-FW-01", "hostname": "panorama-01", "ip_address": "10.10.40.11", "vm_name": "PANO01",
+     "os": "PAN-OS", "os_version": "11.1", "server_type": "Appliance", "environment": "Production",
+     "status": "Active", "cpu": "8 Core", "ram": "32 GB", "storage": "2 TB", "datacenter": "Jakarta DC1",
+     "cluster": "NET-EDGE", "virtualization": "Bare Metal",
+     "description": "Panorama management appliance for the next-generation firewall estate.",
+     "apps": ["Palo Alto Panorama", "F5 BIG-IP LTM"], "pics": ["Rizki Hakim"]},
+    {"name": "NET-DNS-01", "hostname": "infoblox-01", "ip_address": "10.10.40.21", "vm_name": "IBLOX01",
+     "os": "NIOS", "os_version": "9.0", "server_type": "Appliance", "environment": "Production",
+     "status": "Active", "cpu": "4 Core", "ram": "16 GB", "storage": "250 GB", "datacenter": "Bandung DC2",
+     "cluster": "NET-CORE", "virtualization": "Bare Metal",
+     "description": "Authoritative DNS, DHCP, and IPAM grid member.",
+     "apps": ["Infoblox DDI", "Cisco DNA Center"], "pics": ["Rizki Hakim"]},
+    {"name": "DC-BKP-01", "hostname": "veeam-backup-01", "ip_address": "10.10.50.11", "vm_name": "VEEAM01",
+     "os": "Windows Server", "os_version": "2022", "server_type": "Backup Server", "environment": "Production",
+     "status": "Active", "cpu": "16 Core", "ram": "64 GB", "storage": "40 TB", "datacenter": "Bandung DC2",
+     "cluster": "BACKUP-CLUSTER", "virtualization": "Bare Metal",
+     "description": "Backup proxy and repository for virtual and physical workloads.",
+     "apps": ["Veeam Backup & Replication", "NetApp ONTAP SAN"], "pics": ["Budi Santoso", "Siti Rahayu"]},
+    {"name": "BIZ-APP-01", "hostname": "jira-app-01", "ip_address": "10.10.60.11", "vm_name": "JIRA01",
+     "os": "Ubuntu Server", "os_version": "22.04 LTS", "server_type": "Application Server", "environment": "Production",
+     "status": "Active", "cpu": "8 Core", "ram": "32 GB", "storage": "600 GB SSD", "datacenter": "Jakarta DC1",
+     "cluster": "BIZ-CLUSTER", "virtualization": "VMware vSphere 8",
+     "description": "Hosts the issue tracker and the corporate wiki application tier.",
+     "apps": ["Jira Software", "Confluence Wiki"], "pics": ["Dewi Lestari"]},
+    {"name": "FIN-ERP-01", "hostname": "sap-erp-01", "ip_address": "10.10.70.11", "vm_name": "SAPERP01",
+     "os": "SUSE Linux Enterprise", "os_version": "15 SP5", "server_type": "Application Server", "environment": "Production",
+     "status": "Active", "cpu": "32 Core", "ram": "256 GB", "storage": "4 TB NVMe", "datacenter": "Jakarta DC1",
+     "cluster": "SAP-CLUSTER", "virtualization": "Bare Metal",
+     "description": "SAP S/4HANA application server for finance and procurement modules.",
+     "apps": ["SAP S/4HANA ERP", "Coupa Procurement"], "pics": ["Dewi Lestari"]},
+    {"name": "STG-TEST-01", "hostname": "staging-test-01", "ip_address": "10.20.10.11", "vm_name": "STGTEST01",
+     "os": "Ubuntu Server", "os_version": "24.04 LTS", "server_type": "Virtual Machine", "environment": "Staging",
+     "status": "Active", "cpu": "4 Core", "ram": "16 GB", "storage": "200 GB SSD", "datacenter": "Jakarta DC1",
+     "cluster": "STG-CLUSTER", "virtualization": "VMware vSphere 8",
+     "description": "Shared staging host. Not yet assigned to an application or PIC.",
+     "apps": [], "pics": []},
+]
+
+PIC_SEEDS = [
+    {"name": "Jane Smith", "initials": "JS", "employee_id": "EMP002", "email": "jane.smith@company.com",
+     "phone": "+62 811-1000-002", "department": "IT Infrastructure", "position": "Infrastructure Engineer",
+     "status": "Active", "apps": ["Splunk Enterprise SIEM", "Grafana Enterprise"],
+     "standby": [("Splunk Enterprise SIEM", 1, "Primary on-call for SIEM ingestion"),
+                 ("Grafana Enterprise", 6, "Dashboard and alerting coverage")]},
+    {"name": "Andi Pratama", "initials": "AP", "employee_id": "EMP007", "email": "andi.pratama@company.com",
+     "phone": "+62 811-1000-007", "department": "Security Operations", "position": "Security Engineer",
+     "status": "Active", "apps": ["CyberArk PAS", "Tenable Nessus", "HashiCorp Vault"],
+     "standby": [("CyberArk PAS", 3, "Credential vault escalation"),
+                 ("Tenable Nessus", 9, "Vulnerability scan window")]},
+    {"name": "Budi Santoso", "initials": "BS", "employee_id": "EMP011", "email": "budi.santoso@company.com",
+     "phone": "+62 811-1000-011", "department": "IT Infrastructure", "position": "Virtualization Lead",
+     "status": "Active", "apps": ["VMware vCenter", "Kubernetes OpenShift", "Veeam Backup & Replication"],
+     "standby": [("VMware vCenter", 2, "Hypervisor maintenance window"),
+                 ("Veeam Backup & Replication", 12, "Backup restore verification")]},
+    {"name": "Siti Rahayu", "initials": "SR", "employee_id": "EMP015", "email": "siti.rahayu@company.com",
+     "phone": "+62 811-1000-015", "department": "Monitoring & Observability", "position": "SRE",
+     "status": "Active", "apps": ["Prometheus & Alertmanager", "Dynatrace OneAgent", "Datadog APM"],
+     "standby": [("Prometheus & Alertmanager", 4, "Alert routing duty"),
+                 ("Datadog APM", 11, "Trace pipeline monitoring")]},
+    {"name": "Rizki Hakim", "initials": "RH", "employee_id": "EMP021", "email": "rizki.hakim@company.com",
+     "phone": "+62 811-1000-021", "department": "Network Engineering", "position": "Network Architect",
+     "status": "Active", "apps": ["Palo Alto Panorama", "Infoblox DDI", "Cisco DNA Center"],
+     "standby": [("Palo Alto Panorama", 5, "Firewall policy change freeze")]},
+    {"name": "Dewi Lestari", "initials": "DL", "employee_id": "EMP029", "email": "dewi.lestari@company.com",
+     "phone": "+62 811-1000-029", "department": "Business Applications", "position": "Application Support Lead",
+     "status": "Inactive", "apps": ["Jira Software", "SAP S/4HANA ERP"],
+     "standby": [("SAP S/4HANA ERP", 8, "Month-end close support")]},
+]
+
+
 async def seed() -> None:
     from lib.db import db, ensure_indexes
 
@@ -207,11 +326,71 @@ async def seed() -> None:
             }
         )
     await db.apps.insert_many(docs)
+    app_ids = {doc["name"]: doc["id"] for doc in docs}
+
+    # PICs first (servers reference them by id)
+    await db.pics.delete_many({})
+    await db.servers.delete_many({})
+    pic_ids: dict[str, str] = {}
+    for spec in PIC_SEEDS:
+        pic_id = str(uuid.uuid4())
+        pic_ids[spec["name"]] = pic_id
+        await db.pics.insert_one(
+            {
+                "id": pic_id,
+                "name": spec["name"],
+                "initials": spec["initials"],
+                "employee_id": spec["employee_id"],
+                "email": spec["email"],
+                "phone": spec["phone"],
+                "department": spec["department"],
+                "position": spec["position"],
+                "status": spec["status"],
+                "application_ids": [app_ids[name] for name in spec["apps"]],
+                "standby_schedule": [
+                    {
+                        "date": (now + timedelta(days=offset)).strftime("%Y-%m-%d"),
+                        "application_id": app_ids[app_name],
+                        "notes": note,
+                    }
+                    for app_name, offset, note in spec["standby"]
+                ],
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+
+    for spec in SERVER_SEEDS:
+        await db.servers.insert_one(
+            {
+                "id": str(uuid.uuid4()),
+                "name": spec["name"],
+                "hostname": spec["hostname"],
+                "ip_address": spec["ip_address"],
+                "vm_name": spec["vm_name"],
+                "os": spec["os"],
+                "os_version": spec["os_version"],
+                "server_type": spec["server_type"],
+                "environment": spec["environment"],
+                "status": spec["status"],
+                "cpu": spec["cpu"],
+                "ram": spec["ram"],
+                "storage": spec["storage"],
+                "datacenter": spec["datacenter"],
+                "cluster": spec["cluster"],
+                "virtualization": spec["virtualization"],
+                "description": spec["description"],
+                "application_ids": [app_ids[name] for name in spec["apps"]],
+                "pic_ids": [pic_ids[name] for name in spec["pics"]],
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
 
     await ensure_indexes()
     print(
         f"Seeded {len(CATEGORY_SEEDS)} categories, {len(USER_SEEDS)} users, "
-        f"{len(docs)} applications."
+        f"{len(docs)} applications, {len(SERVER_SEEDS)} servers, {len(PIC_SEEDS)} PICs."
     )
 
 

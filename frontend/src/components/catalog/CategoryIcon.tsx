@@ -17,7 +17,8 @@ export function CategoryIcon({
       <img
         src={iconUrl}
         alt=""
-        className={cn("object-contain", className)}
+        loading="lazy"
+        className={cn("h-full w-full object-contain", className)}
         aria-hidden="true"
       />
     );

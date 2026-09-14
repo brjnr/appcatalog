@@ -40,6 +40,17 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("token", ASCENDING)], name="token", unique=True),
         IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),
     ],
+    "servers": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("name", ASCENDING)], name="name"),
+        IndexModel([("application_ids", ASCENDING)], name="application_ids"),
+        IndexModel([("pic_ids", ASCENDING)], name="pic_ids"),
+    ],
+    "pics": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("name", ASCENDING)], name="name"),
+        IndexModel([("application_ids", ASCENDING)], name="application_ids"),
+    ],
 }
 
 

@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
 
 from lib.auth import hash_password, require_admin
@@ -71,6 +72,39 @@ async def create_user(input: UserCreate, _: dict = Depends(require_admin)):
     }
     await db.users.insert_one(doc)
     return _out(doc)
+
+
+class BulkCategoryAssignment(BaseModel):
+    """Assign or unassign one category across many users in a single request."""
+
+    category_id: str = Field(min_length=1)
+    user_ids: list[str] = Field(min_length=1)
+    assign: bool = True
+
+
+@router.post("/users/bulk-assign-category", response_model=list[UserOut])
+async def bulk_assign_category(
+    input: BulkCategoryAssignment, _: dict = Depends(require_admin)
+):
+    await _validate_category_ids([input.category_id])
+    targets = await db.users.find({"id": {"$in": input.user_ids}}).to_list(1000)
+    if len(targets) != len(set(input.user_ids)):
+        raise HTTPException(status_code=404, detail="one or more users do not exist")
+
+    now = datetime.now(timezone.utc)
+    update = (
+        {"$addToSet": {"assigned_category_ids": input.category_id}}
+        if input.assign
+        else {"$pull": {"assigned_category_ids": input.category_id}}
+    )
+    # Administrators are unrestricted, so assignments are meaningless for them.
+    ids = [t["id"] for t in targets if t.get("role") != "administrator"]
+    if ids:
+        await db.users.update_many({"id": {"$in": ids}}, update)
+        await db.users.update_many({"id": {"$in": ids}}, {"$set": {"updated_at": now}})
+
+    docs = await db.users.find({"id": {"$in": input.user_ids}}).sort("name", 1).to_list(1000)
+    return [_out(d) for d in docs]
 
 
 @router.put("/users/{user_id}", response_model=UserOut)

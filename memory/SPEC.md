@@ -42,11 +42,38 @@ administrators manage everything.
   environment, status, url, icon, usage_count, favorite_count, created_at, updated_at.
 - `UserOut`: id, name, email, role, assigned_category_ids[], is_active. Password hash never leaves
   the backend.
+- `Server` (`models/infra.py`): id, name, hostname, ip_address, vm_name, os, os_version,
+  server_type, environment (Production|Staging|Development|DR|Internal), status
+  (Active|Maintenance|Decommissioned), cpu, ram, storage, datacenter, cluster, virtualization,
+  description, **application_ids[]**, **pic_ids[]**. `ServerOut` adds resolved `applications[]`
+  and `pics[]` (RefSummary with initials) so the UI can link straight through.
+- `Pic`: id, name, **initials** (manual, uppercase, 1–3 alphanumeric), employee_id, email, phone,
+  department, position, status (Active|Inactive), application_ids[],
+  standby_schedule[{date, application_id, notes}]. `PicOut` adds `applications[]`, `servers[]`, and
+  `standby_schedule_out[]` (each row carries `application_name`).
+
+## Application ↔ Server ↔ PIC relationships
+- Application↔Server is **many-to-many** via `servers.application_ids`.
+- Server↔PIC is stored **only** on `servers.pic_ids` (single source of truth). Editing a PIC's
+  `server_ids` mirrors onto servers; deleting a PIC pulls its id from every server.
+- PIC↔Application is stored on `pics.application_ids`.
+
+## Servers & PIC API (all admin-only for writes)
+- `GET /api/servers` (filters: `q`, `application_id`) · `GET /api/servers/{id}` ·
+  POST/PUT/DELETE `/api/servers`. Registration requires only `name` — apps and PICs link later.
+- `GET /api/pics` (filters: `q`, `application_id`) · `GET /api/pics/{id}` ·
+  POST/PUT/DELETE `/api/pics`. Registration requires only `name` + `initials`.
+- Visibility (`lib/visibility.py`): a normal user sees a **server** if it serves at least one app in
+  their assigned categories, and a **PIC** if that PIC owns a visible app or a visible server.
+  Unauthorized detail requests return **403**. Admins see everything.
+- `POST /api/users/bulk-assign-category` — `{category_id, user_ids[], assign}` assigns/removes one
+  category across many users in one request; administrators in the list are skipped.
 
 ## Category icons
 `POST /api/categories/{id}/icon` (multipart, PNG/JPEG/WebP/SVG, ≤2 MB) → saves to
 `backend/uploads/{id}.{ext}` and sets `icon_url`. `DELETE .../icon` removes it and falls back to the
-lucide glyph. `CategoryIcon` component renders the uploaded image everywhere a category appears.
+lucide glyph. `CategoryIcon` renders uploaded images with `object-contain` (scaled proportionally,
+never cropped/stretched); the upload dialog warns on non-square images and shows pixel dimensions.
 
 ## Frontend routes
 - `/login` — sign in (demo accounts listed on the page).
@@ -55,13 +82,21 @@ lucide glyph. `CategoryIcon` component renders the uploaded image everywhere a c
   (grid, list, alphabetical + A–Z jump bar, category, compact). Layout/sort/favorites persist in
   localStorage (`catalog.layout`, `catalog.sort`, `catalog.favorites`).
 - `/app/:id` — detail: purpose, badges, stats, Open Application (new tab + launch counter),
-  favorite, admin-only Edit/Delete, related apps. Shows an **Access denied** state on 403.
+  favorite, admin-only Edit/Delete, related apps, plus an **Application Servers** section (clickable
+  server chips) and a **Person in Charge** section (clickable `[JS] Jane Smith` badges).
+  Shows an **Access denied** state on 403.
+- Server/PIC details open as **deep-linkable side drawers** driven by `?server=<id>` / `?pic=<id>`
+  (`lib/infraNav.tsx` → `InfraNavProvider` + `useInfraNav`). Navigation chains both ways:
+  App → Server → Server PIC → PIC, and App → PIC → Assigned Server → Server.
 - `/admin` (administrator only, guarded in `AdminLayout`): `index` Dashboard, `users`, `roles`,
-  `categories`, `applications`, `access` (user × category matrix).
+  `categories`, `applications`, `servers`, `pics` (PIC Management), `access` (bulk assignment panel
+  + user × category matrix).
 
 ## Seed data (`cd /app/backend && python seed.py`)
-8 categories, 3 users, 36 applications. Idempotent (clears sessions/users/categories/apps first).
-Credentials in `memory/test_credentials.md`.
+8 categories, 3 users, 36 applications, 14 servers, 6 PICs. Idempotent (clears
+sessions/users/categories/apps/servers/pics first). `STG-TEST-01` is intentionally left with no
+application and no PIC to exercise standalone registration. Credentials in
+`memory/test_credentials.md`.
 
 ## Notes
 - base-ui gotchas hit here: `Menu.Item` fires **onClick** (not `onSelect`), and

@@ -1,17 +1,31 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { apiErrorMessage, apiGet, apiPut } from "@/lib/api";
+import { Layers, Users } from "lucide-react";
+import { apiErrorMessage, apiGet, apiPost, apiPut } from "@/lib/api";
 import type { AppCategory, SessionUser } from "@/lib/types";
 import { ROLE_LABELS, slugify } from "@/lib/types";
 import { CategoryIcon } from "@/components/catalog/CategoryIcon";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-// Access Management: the user × category assignment matrix. Every change is saved
-// immediately and enforced by the backend on the next request.
+// Access Management: bulk assignment panel + the user × category matrix. Every change is
+// saved immediately and enforced by the backend on the next request.
 export default function AdminAccess() {
   const queryClient = useQueryClient();
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
+  const [bulkUserIds, setBulkUserIds] = useState<string[]>([]);
+
   const { data: users, isLoading } = useQuery({
     queryKey: ["users"],
     queryFn: () => apiGet<SessionUser[]>("/users"),
@@ -31,12 +45,50 @@ export default function AdminAccess() {
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
 
+  // One request assigns/unassigns a category across every selected user.
+  const bulkAssign = useMutation({
+    mutationFn: (assignFlag: boolean) =>
+      apiPost<SessionUser[]>("/users/bulk-assign-category", {
+        category_id: bulkCategoryId,
+        user_ids: bulkUserIds,
+        assign: assignFlag,
+      }),
+    onSuccess: (_result, assignFlag) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      const categoryName =
+        (categories ?? []).find((c) => c.id === bulkCategoryId)?.name ?? "category";
+      toast.success(
+        assignFlag
+          ? `${categoryName} assigned to ${bulkUserIds.length} user(s)`
+          : `${categoryName} removed from ${bulkUserIds.length} user(s)`,
+      );
+      setBulkUserIds([]);
+    },
+    onError: (error) => toast.error(apiErrorMessage(error)),
+  });
+
+  const runBulk = (assignFlag: boolean) => {
+    if (!bulkCategoryId) {
+      toast.error("Choose a category first");
+      return;
+    }
+    if (bulkUserIds.length === 0) {
+      toast.error("Select at least one user");
+      return;
+    }
+    bulkAssign.mutate(assignFlag);
+  };
+
   const toggle = (user: SessionUser, categoryId: string, checked: boolean) => {
     const ids = checked
       ? [...new Set([...user.assigned_category_ids, categoryId])]
       : user.assigned_category_ids.filter((id) => id !== categoryId);
     assign.mutate({ user, ids });
   };
+
+  const assignableUsers = (users ?? []).filter((u) => u.role !== "administrator");
+  const allSelected =
+    assignableUsers.length > 0 && bulkUserIds.length === assignableUsers.length;
 
   return (
     <div data-testid="access-page" className="pb-10">
@@ -48,6 +100,94 @@ export default function AdminAccess() {
         assigned categories — even if they type an application's URL directly. Administrators
         always have full access.
       </p>
+
+      {/* Bulk assignment — one category across many users at once */}
+      <Card className="mt-4 p-5" data-testid="bulk-assign-panel">
+        <div className="flex items-center gap-2">
+          <Layers className="h-4 w-4 text-sky-600 dark:text-sky-300" aria-hidden="true" />
+          <h2 className="font-heading text-sm font-semibold text-foreground">Bulk assignment</h2>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Pick one category, select the users, then assign or remove it for all of them in a single
+          step. Administrators are skipped — they already have everything.
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="grid gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Category</span>
+            <Select value={bulkCategoryId} onValueChange={setBulkCategoryId}>
+              <SelectTrigger
+                data-testid="bulk-category-select"
+                aria-label="Category to assign in bulk"
+                className="w-56"
+              >
+                <SelectValue placeholder="Choose a category" />
+              </SelectTrigger>
+              <SelectContent>
+                {(categories ?? []).map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            onClick={() => runBulk(true)}
+            disabled={bulkAssign.isPending}
+            data-testid="bulk-assign-btn"
+          >
+            <Users className="h-4 w-4" aria-hidden="true" /> Assign to selected
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => runBulk(false)}
+            disabled={bulkAssign.isPending}
+            data-testid="bulk-unassign-btn"
+          >
+            Remove from selected
+          </Button>
+          <span
+            data-testid="bulk-selected-count"
+            className="ml-auto text-xs font-medium text-muted-foreground"
+          >
+            {bulkUserIds.length} user(s) selected
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+          <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={(checked) =>
+                setBulkUserIds(checked === true ? assignableUsers.map((u) => u.id) : [])
+              }
+              data-testid="bulk-select-all"
+            />
+            Select all normal users
+          </label>
+          {assignableUsers.map((user) => (
+            <label
+              key={user.id}
+              className="flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs text-foreground"
+            >
+              <Checkbox
+                checked={bulkUserIds.includes(user.id)}
+                onCheckedChange={(checked) =>
+                  setBulkUserIds((prev) =>
+                    checked === true
+                      ? [...new Set([...prev, user.id])]
+                      : prev.filter((id) => id !== user.id),
+                  )
+                }
+                data-testid={`bulk-user-checkbox-${slugify(user.email)}`}
+              />
+              {user.name}
+            </label>
+          ))}
+        </div>
+      </Card>
 
       <div className="mt-4 overflow-x-auto rounded-xl border bg-card" data-testid="access-matrix">
         <Table>

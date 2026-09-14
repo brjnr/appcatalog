@@ -100,3 +100,79 @@ export interface CardActions {
   onToggleFavorite: (app: CatalogApp) => void;
   isFavorite: (appId: string) => boolean;
 }
+
+// ---------------------------------------------------- servers & PICs (models/infra.py)
+
+/** Lightweight cross-entity reference that makes servers/PICs/apps clickable. */
+export interface RefSummary {
+  id: string;
+  name: string;
+  initials?: string | null;
+}
+
+export interface StandbyEntry {
+  date: string; // YYYY-MM-DD
+  application_id: string;
+  notes: string;
+}
+
+export interface StandbyEntryOut extends StandbyEntry {
+  application_name: string;
+}
+
+export interface Server {
+  id: string;
+  name: string;
+  hostname: string;
+  ip_address: string;
+  vm_name: string;
+  os: string;
+  os_version: string;
+  server_type: string;
+  environment: string;
+  status: string;
+  cpu: string;
+  ram: string;
+  storage: string;
+  datacenter: string;
+  cluster: string;
+  virtualization: string;
+  description: string;
+  application_ids: string[];
+  pic_ids: string[];
+  created_at: string;
+  updated_at: string;
+  applications: RefSummary[];
+  pics: RefSummary[];
+}
+
+export interface Pic {
+  id: string;
+  name: string;
+  initials: string;
+  employee_id: string;
+  email: string;
+  phone: string;
+  department: string;
+  position: string;
+  status: string;
+  application_ids: string[];
+  standby_schedule: StandbyEntry[];
+  created_at: string;
+  updated_at: string;
+  applications: RefSummary[];
+  servers: RefSummary[];
+  standby_schedule_out: StandbyEntryOut[];
+}
+
+export const SERVER_ENVIRONMENTS = [
+  "Production",
+  "Staging",
+  "Development",
+  "DR",
+  "Internal",
+] as const;
+
+export const SERVER_STATUSES = ["Active", "Maintenance", "Decommissioned"] as const;
+
+export const PIC_STATUSES = ["Active", "Inactive"] as const;

@@ -9,6 +9,8 @@ import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminRoles from "@/pages/admin/AdminRoles";
 import AdminCategories from "@/pages/admin/AdminCategories";
 import AdminApplications from "@/pages/admin/AdminApplications";
+import AdminServers from "@/pages/admin/AdminServers";
+import AdminPics from "@/pages/admin/AdminPics";
 import AdminAccess from "@/pages/admin/AdminAccess";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
@@ -25,6 +27,8 @@ export default function App() {
           <Route path="roles" element={<AdminRoles />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="applications" element={<AdminApplications />} />
+          <Route path="servers" element={<AdminServers />} />
+          <Route path="pics" element={<AdminPics />} />
           <Route path="access" element={<AdminAccess />} />
         </Route>
       </Routes>

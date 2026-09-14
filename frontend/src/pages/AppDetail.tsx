@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   MousePointerClick,
   Pencil,
+  ServerIcon,
   ShieldBan,
   Star,
   Trash2,
@@ -14,22 +15,37 @@ import {
 import { ApiError, apiDelete, apiErrorMessage, apiGet, apiPost } from "@/lib/api";
 import { formatDate, formatCount } from "@/lib/format";
 import { useFavorites } from "@/lib/prefs";
-import { slugify, type CatalogApp, type SessionUser } from "@/lib/types";
+import { InfraNavProvider, useInfraNav } from "@/lib/infraNav";
+import { slugify, type CatalogApp, type Pic, type SessionUser, type Server } from "@/lib/types";
 import { AppNavbar } from "@/components/catalog/AppNavbar";
 import { AppIcon } from "@/components/catalog/AppIcon";
 import { EnvironmentBadge, StatusBadge } from "@/components/catalog/StatusBadge";
+import { InfraStatusBadge } from "@/components/catalog/InfraBits";
+import { PicBadge } from "@/components/catalog/PicBadge";
+import { ServerDrawer } from "@/components/catalog/ServerDrawer";
+import { PicDrawer } from "@/components/catalog/PicDrawer";
 import { AppFormDialog } from "@/components/catalog/AppFormDialog";
 import { ConfirmDeleteDialog } from "@/components/catalog/ConfirmDeleteDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
-export default function AppDetail() {
+// Drawers read ?server= / ?pic= from the URL, so they need the provider above them.
+export default function AppDetailPage() {
+  return (
+    <InfraNavProvider>
+      <AppDetail />
+    </InfraNavProvider>
+  );
+}
+
+function AppDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
   const { favorites, toggle: toggleFavoriteLocal } = useFavorites();
+  const { openServer, openPic } = useInfraNav();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -65,6 +81,19 @@ export default function AppDetail() {
       .sort((a, b) => b.usage_count - a.usage_count)
       .slice(0, 4);
   }, [app, allApps]);
+
+  // Servers and PICs attached to this application (both scoped by the backend).
+  const { data: servers } = useQuery({
+    queryKey: ["servers", "by-app", id],
+    queryFn: () => apiGet<Server[]>(`/servers?application_id=${id}`),
+    enabled: Boolean(id && user && app),
+  });
+
+  const { data: pics } = useQuery({
+    queryKey: ["pics", "by-app", id],
+    queryFn: () => apiGet<Pic[]>(`/pics?application_id=${id}`),
+    enabled: Boolean(id && user && app),
+  });
 
   const launch = useMutation({
     mutationFn: (appId: string) => apiPost<CatalogApp>(`/apps/${appId}/launch`),
@@ -193,6 +222,75 @@ export default function AppDetail() {
                     {app.description}
                   </p>
                 </div>
+
+                {/* Application Servers — each chip opens the server drawer */}
+                <div className="mt-6 border-t pt-5">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Application Servers
+                    </h2>
+                    {servers && servers.length > 0 && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {servers.length}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap gap-2" data-testid="app-servers-section">
+                    {servers === undefined ? (
+                      <div className="h-9 w-40 animate-pulse rounded-lg bg-muted/50" />
+                    ) : servers.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No servers assigned to this application yet.
+                      </p>
+                    ) : (
+                      servers.map((server) => (
+                        <button
+                          key={server.id}
+                          type="button"
+                          onClick={() => openServer(server.id)}
+                          data-testid={`app-server-chip-${slugify(server.name)}`}
+                          title={`View ${server.name} details`}
+                          className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 transition-[border-color,background-color,transform] duration-150 hover:-translate-y-0.5 hover:border-sky-400/70 hover:bg-sky-50 dark:hover:border-sky-500/60 dark:hover:bg-sky-950/40"
+                        >
+                          <ServerIcon
+                            className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-300"
+                            aria-hidden="true"
+                          />
+                          <span className="font-mono text-[13px] font-medium text-foreground">
+                            {server.name}
+                          </span>
+                          <InfraStatusBadge status={server.status} className="ml-0.5" />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Application PIC — each badge opens the PIC drawer */}
+                <div className="mt-5 border-t pt-5">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Person in Charge
+                  </h2>
+                  <div className="mt-2.5 flex flex-wrap gap-2" data-testid="app-pics-section">
+                    {pics === undefined ? (
+                      <div className="h-9 w-36 animate-pulse rounded-full bg-muted/50" />
+                    ) : pics.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No PIC assigned to this application yet.
+                      </p>
+                    ) : (
+                      pics.map((pic) => (
+                        <PicBadge
+                          key={pic.id}
+                          id={pic.id}
+                          name={pic.name}
+                          initials={pic.initials}
+                          onClick={openPic}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
               </Card>
 
               <div className="flex flex-col gap-4">
@@ -308,6 +406,10 @@ export default function AppDetail() {
           </>
         )}
       </main>
+
+      {/* Deep-linkable drawers: App → Server → PIC → Server … chains both ways */}
+      <ServerDrawer />
+      <PicDrawer />
     </div>
   );
 }

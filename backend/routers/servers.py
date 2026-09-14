@@ -1,0 +1,112 @@
+"""Server inventory endpoints — scoped reads, admin-only mutations."""
+
+import re
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
+from pymongo import ReturnDocument
+
+from lib.auth import require_admin, require_user
+from lib.db import db
+from lib.visibility import app_name_map, server_is_visible, visible_app_ids
+from models.infra import RefSummary, Server, ServerCreate, ServerOut, ServerUpdate
+
+router = APIRouter()
+
+
+async def _to_out(doc: dict) -> ServerOut:
+    app_ids = list(doc.get("application_ids") or [])
+    pic_ids = list(doc.get("pic_ids") or [])
+    names = await app_name_map(app_ids)
+    pics = []
+    if pic_ids:
+        pic_docs = await db.pics.find({"id": {"$in": pic_ids}}).to_list(200)
+        pics = [
+            RefSummary(id=p["id"], name=p["name"], initials=p.get("initials"))
+            for p in sorted(pic_docs, key=lambda p: p["name"].lower())
+        ]
+    base = Server(**doc)
+    return ServerOut(
+        **base.model_dump(),
+        applications=[
+            RefSummary(id=app_id, name=names[app_id])
+            for app_id in sorted(app_ids, key=lambda i: names.get(i, "").lower())
+            if app_id in names
+        ],
+        pics=pics,
+    )
+
+
+async def _validate_links(app_ids: list[str] | None, pic_ids: list[str] | None) -> None:
+    if app_ids:
+        found = await db.apps.count_documents({"id": {"$in": list(set(app_ids))}})
+        if found != len(set(app_ids)):
+            raise HTTPException(status_code=422, detail="one or more applications do not exist")
+    if pic_ids:
+        found = await db.pics.count_documents({"id": {"$in": list(set(pic_ids))}})
+        if found != len(set(pic_ids)):
+            raise HTTPException(status_code=422, detail="one or more PICs do not exist")
+
+
+@router.get("/servers", response_model=list[ServerOut])
+async def list_servers(
+    q: str | None = None,
+    application_id: str | None = None,
+    user: dict = Depends(require_user),
+):
+    query: dict = {}
+    if application_id:
+        query["application_ids"] = application_id
+    if q and q.strip():
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        query["$or"] = [{"name": rx}, {"hostname": rx}, {"ip_address": rx}, {"vm_name": rx}]
+
+    allowed = await visible_app_ids(user)
+    docs = await db.servers.find(query).sort("name", 1).to_list(2000)
+    visible = [d for d in docs if server_is_visible(d, allowed)]
+    return [await _to_out(d) for d in visible]
+
+
+@router.get("/servers/{server_id}", response_model=ServerOut)
+async def get_server(server_id: str, user: dict = Depends(require_user)):
+    doc = await db.servers.find_one({"id": server_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="server not found")
+    allowed = await visible_app_ids(user)
+    if not server_is_visible(doc, allowed):
+        raise HTTPException(
+            status_code=403,
+            detail="access denied: this server belongs to applications not assigned to you",
+        )
+    return await _to_out(doc)
+
+
+@router.post("/servers", response_model=ServerOut, status_code=201)
+async def create_server(input: ServerCreate, _: dict = Depends(require_admin)):
+    await _validate_links(input.application_ids, input.pic_ids)
+    server = Server(**input.model_dump())
+    await db.servers.insert_one(server.model_dump())
+    return await _to_out(server.model_dump())
+
+
+@router.put("/servers/{server_id}", response_model=ServerOut)
+async def update_server(server_id: str, input: ServerUpdate, _: dict = Depends(require_admin)):
+    changes = input.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="no fields to update")
+    await _validate_links(changes.get("application_ids"), changes.get("pic_ids"))
+    changes["updated_at"] = datetime.now(timezone.utc)
+    doc = await db.servers.find_one_and_update(
+        {"id": server_id}, {"$set": changes}, return_document=ReturnDocument.AFTER
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="server not found")
+    return await _to_out(doc)
+
+
+@router.delete("/servers/{server_id}", status_code=204)
+async def delete_server(server_id: str, _: dict = Depends(require_admin)):
+    result = await db.servers.delete_one({"id": server_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="server not found")
+    return None

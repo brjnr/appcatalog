@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Trash2, Upload } from "lucide-react";
-import { apiDelete, apiErrorMessage, apiPost, apiPostForm, apiPut } from "@/lib/api";
+import { Trash2, Upload } from "lucide-react";import { apiDelete, apiErrorMessage, apiPost, apiPostForm, apiPut } from "@/lib/api";
 import type { AppCategory } from "@/lib/types";
 import { CATEGORY_STATUSES, slugify } from "@/lib/types";
 import { CategoryIcon } from "./CategoryIcon";
@@ -44,6 +43,7 @@ export function CategoryFormDialog({ open, onOpenChange, initial }: CategoryForm
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeIcon, setRemoveIcon] = useState(false);
+  const [dimensions, setDimensions] = useState<{ w: number; h: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -55,6 +55,7 @@ export function CategoryFormDialog({ open, onOpenChange, initial }: CategoryForm
     setFile(null);
     setPreviewUrl(null);
     setRemoveIcon(false);
+    setDimensions(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [open, initial]);
 
@@ -82,9 +83,38 @@ export function CategoryFormDialog({ open, onOpenChange, initial }: CategoryForm
   });
 
   const pickFile = (selected: File | null) => {
+    if (!selected) {
+      setFile(null);
+      setPreviewUrl(null);
+      setDimensions(null);
+      return;
+    }
+    if (selected.size > 2 * 1024 * 1024) {
+      toast.error("Icon must be 2 MB or smaller");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setFile(selected);
     setRemoveIcon(false);
-    setPreviewUrl(selected ? URL.createObjectURL(selected) : null);
+    const url = URL.createObjectURL(selected);
+    setPreviewUrl(url);
+
+    // Icons look best square — warn (don't block) when the aspect ratio is far off.
+    if (selected.type !== "image/svg+xml") {
+      const img = new Image();
+      img.onload = () => {
+        setDimensions({ w: img.naturalWidth, h: img.naturalHeight });
+        const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
+        if (ratio < 0.8 || ratio > 1.25) {
+          toast.warning(
+            `That image is ${img.naturalWidth}×${img.naturalHeight}. Square icons (1:1) display best — it will be scaled to fit without cropping.`,
+          );
+        }
+      };
+      img.src = url;
+    } else {
+      setDimensions(null);
+    }
   };
 
   const handleSubmit = (event: FormEvent) => {
@@ -178,7 +208,8 @@ export function CategoryFormDialog({ open, onOpenChange, initial }: CategoryForm
           <div className="grid gap-1.5">
             <Label>Custom icon image</Label>
             <p className="text-xs text-muted-foreground">
-              Shown wherever the category appears. PNG, JPEG, WebP, or SVG up to 2 MB.
+              Square (1:1) works best — 128×128 px or larger. PNG, JPEG, WebP, or SVG up to 2 MB.
+              Icons are scaled proportionally to fit, never cropped or stretched.
             </p>
             <div className="flex items-center gap-3 rounded-lg border p-3">
               <span
@@ -188,7 +219,7 @@ export function CategoryFormDialog({ open, onOpenChange, initial }: CategoryForm
                 <CategoryIcon
                   icon={iconName}
                   iconUrl={shownUrl}
-                  className="h-7 w-7 text-sky-600 dark:text-sky-300"
+                  className="h-7 w-7 max-h-7 max-w-7 text-sky-600 dark:text-sky-300"
                 />
               </span>
               <div className="flex flex-wrap gap-2">
@@ -213,11 +244,20 @@ export function CategoryFormDialog({ open, onOpenChange, initial }: CategoryForm
                       setRemoveIcon(true);
                       setFile(null);
                       setPreviewUrl(null);
+                      setDimensions(null);
                       if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
                   </Button>
+                )}
+                {dimensions && (
+                  <span
+                    data-testid="category-icon-dimensions"
+                    className="self-center font-mono text-[11px] text-muted-foreground"
+                  >
+                    {dimensions.w}×{dimensions.h} px
+                  </span>
                 )}
               </div>
               <input
