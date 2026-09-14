@@ -111,9 +111,9 @@ function Notes() {
               Notes & Memos
             </h1>
             <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">
-              Temporary notes about servers, alerts, or applications. Share one with everyone or a
-              single department — the author, that department, and administrators can edit it.
-              Expired notes move to Trash and are purged 7 days later.
+              Temporary notes about servers, alerts, or applications. Share one with everyone or
+              with any number of departments — the author, those departments, and administrators can
+              edit it. Expired notes move to Trash and are purged 7 days later.
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">

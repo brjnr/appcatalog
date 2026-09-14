@@ -159,6 +159,8 @@ application and no PIC to exercise standalone registration. Credentials in
   filter, `q` search); 422 on an unknown sort.
 - **Alerts**: `GET /api/notes/alerts?within_days=2` → notes linked to an application/server expiring
   soon; drives the amber badge on the navbar Notes icon (`notes-alert-badge`).
+- "Share with" is a **searchable multi-select dropdown** (`MultiSearchSelect` in
+  `components/catalog/SearchSelect.tsx`) — empty selection = Everyone.
 - **Templates**: `NOTE_TEMPLATES` (Incident / Patching / Maintenance window) prefill the form.
 - Page: Active / Deleted tabs, searchable department filter + sort dropdowns
   (`components/catalog/SearchSelect.tsx`), cards click through to a **detail popup**

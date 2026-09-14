@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { MultiSearchSelect } from "./SearchSelect";
 
 interface NoteFormDialogProps {
   open: boolean;
@@ -197,47 +197,18 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
 
           <div className="grid gap-1.5">
             <Label>Share with</Label>
-            <div className="flex flex-wrap gap-1.5" data-testid="note-form-departments">
-              <button
-                type="button"
-                data-testid="note-form-department-everyone"
-                onClick={() => setDepartmentIds([])}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
-                  departmentIds.length === 0
-                    ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                    : "border-border text-muted-foreground hover:bg-muted",
-                )}
-              >
-                Everyone
-              </button>
-              {(departments ?? []).map((department) => {
-                const on = departmentIds.includes(department.id);
-                return (
-                  <button
-                    key={department.id}
-                    type="button"
-                    data-testid={`note-form-department-${slugify(department.name)}`}
-                    aria-pressed={on}
-                    onClick={() =>
-                      setDepartmentIds((prev) =>
-                        on
-                          ? prev.filter((id) => id !== department.id)
-                          : [...prev, department.id],
-                      )
-                    }
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
-                      on
-                        ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                        : "border-border text-muted-foreground hover:bg-muted",
-                    )}
-                  >
-                    {department.name}
-                  </button>
-                );
-              })}
-            </div>
+            <MultiSearchSelect
+              testid="note-form-departments"
+              values={departmentIds}
+              onChange={setDepartmentIds}
+              emptyLabel="Everyone"
+              placeholder="Search departments…"
+              options={(departments ?? []).map((department) => ({
+                id: department.id,
+                label: department.name,
+                hint: `${department.pic_count} PIC`,
+              }))}
+            />
             <p className="text-[11px] text-muted-foreground">
               Pick one or more departments — members of any of them (plus administrators) can see
               and edit this note. Leave it on "Everyone" to share company-wide.
