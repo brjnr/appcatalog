@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Search } from "lucide-react";
 import { apiErrorMessage, apiGet, apiPost, apiPut } from "@/lib/api";
 import {
   LOCATION_LABELS,
@@ -69,6 +70,8 @@ export function ServerFormDialog({ open, onOpenChange, initial }: ServerFormDial
   const [description, setDescription] = useState("");
   const [appIds, setAppIds] = useState<string[]>([]);
   const [picIds, setPicIds] = useState<string[]>([]);
+  const [appQuery, setAppQuery] = useState("");
+  const [picQuery, setPicQuery] = useState("");
 
   const { data: apps } = useQuery({
     queryKey: ["apps"],
@@ -95,6 +98,8 @@ export function ServerFormDialog({ open, onOpenChange, initial }: ServerFormDial
     setDescription(initial?.description ?? "");
     setAppIds(initial?.application_ids ?? []);
     setPicIds(initial?.pic_ids ?? []);
+    setAppQuery("");
+    setPicQuery("");
   }, [open, initial]);
 
   const save = useMutation({
@@ -131,6 +136,16 @@ export function ServerFormDialog({ open, onOpenChange, initial }: ServerFormDial
 
   const toggle = (list: string[], setList: (v: string[]) => void, id: string, on: boolean) =>
     setList(on ? [...new Set([...list, id])] : list.filter((x) => x !== id));
+
+  // Both assignment lists get their own search box — there are 36 apps and a growing PIC roster.
+  const aq = appQuery.trim().toLowerCase();
+  const filteredApps = (apps ?? []).filter((app) =>
+    aq ? `${app.name} ${app.category_name}`.toLowerCase().includes(aq) : true,
+  );
+  const pq = picQuery.trim().toLowerCase();
+  const filteredPics = (pics ?? []).filter((pic) =>
+    pq ? `${pic.name} ${pic.initials} ${pic.department} ${pic.position}`.toLowerCase().includes(pq) : true,
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -236,9 +251,33 @@ export function ServerFormDialog({ open, onOpenChange, initial }: ServerFormDial
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Assigned applications (many-to-many)</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Assigned applications (many-to-many)</Label>
+              <span className="text-[11px] text-muted-foreground" data-testid="server-form-app-selected-count">
+                {appIds.length} selected
+              </span>
+            </div>
+            <div className="relative">
+              <Search
+                className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                value={appQuery}
+                onChange={(event) => setAppQuery(event.target.value)}
+                data-testid="server-form-app-search"
+                aria-label="Search applications"
+                placeholder="Search applications…"
+                className="h-8 pl-8 text-sm"
+              />
+            </div>
             <div className="grid max-h-40 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2">
-              {(apps ?? []).map((app) => (
+              {filteredApps.length === 0 && (
+                <p className="text-xs text-muted-foreground" data-testid="server-form-app-no-match">
+                  No application matches “{appQuery}”.
+                </p>
+              )}
+              {filteredApps.map((app) => (
                 <label key={app.id} className="flex items-center gap-2 text-sm text-foreground">
                   <Checkbox
                     checked={appIds.includes(app.id)}
@@ -254,12 +293,35 @@ export function ServerFormDialog({ open, onOpenChange, initial }: ServerFormDial
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Assigned PICs</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Assigned PICs</Label>
+              <span className="text-[11px] text-muted-foreground" data-testid="server-form-pic-selected-count">
+                {picIds.length} selected
+              </span>
+            </div>
+            <div className="relative">
+              <Search
+                className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                value={picQuery}
+                onChange={(event) => setPicQuery(event.target.value)}
+                data-testid="server-form-pic-search"
+                aria-label="Search PICs"
+                placeholder="Search name, initials, department…"
+                className="h-8 pl-8 text-sm"
+              />
+            </div>
             <div className="grid max-h-36 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2">
               {(pics ?? []).length === 0 ? (
                 <p className="text-xs text-muted-foreground">No PICs registered yet.</p>
+              ) : filteredPics.length === 0 ? (
+                <p className="text-xs text-muted-foreground" data-testid="server-form-pic-no-match">
+                  No PIC matches “{picQuery}”.
+                </p>
               ) : (
-                (pics ?? []).map((pic) => (
+                filteredPics.map((pic) => (
                   <label key={pic.id} className="flex items-center gap-2 text-sm text-foreground">
                     <Checkbox
                       checked={picIds.includes(pic.id)}
