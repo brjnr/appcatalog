@@ -1,4 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api";
+import type { NoteAlerts } from "@/lib/types";
 import { useTheme } from "next-themes";
 import { Building2, CalendarDays, LayoutDashboard, Moon, NotebookPen, Plus, Search, ShieldCheck, Star, Sun } from "lucide-react";
 import { endSession } from "@/lib/session";
@@ -43,6 +46,15 @@ export function AppNavbar({
   const navigate = useNavigate();
   const isDark = theme === "dark";
   const isAdmin = user?.role === "administrator";
+
+  // Badge on the Notes entry point when a note about an app/server expires within 2 days.
+  const { data: alerts } = useQuery({
+    queryKey: ["note-alerts"],
+    queryFn: () => apiGet<NoteAlerts>("/notes/alerts?within_days=2"),
+    enabled: Boolean(user),
+    refetchInterval: 120_000,
+  });
+  const alertCount = alerts?.count ?? 0;
   const initials =
     (user?.name ?? "")
       .split(" ")
@@ -151,10 +163,22 @@ export function AppNavbar({
               to="/notes"
               data-testid="notes-link"
               aria-label="Notes and memos"
-              title="Notes & memos"
-              className="hidden h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
+              title={
+                alertCount > 0
+                  ? `${alertCount} note(s) about an app or server expiring soon`
+                  : "Notes & memos"
+              }
+              className="relative hidden h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
             >
               <NotebookPen className="h-4 w-4" aria-hidden="true" />
+              {alertCount > 0 && (
+                <span
+                  data-testid="notes-alert-badge"
+                  className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white"
+                >
+                  {alertCount}
+                </span>
+              )}
             </Link>
           )}
 

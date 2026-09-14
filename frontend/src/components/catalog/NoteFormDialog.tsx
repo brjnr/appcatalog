@@ -6,6 +6,7 @@ import { apiErrorMessage, apiGet, apiPost, apiPut } from "@/lib/api";
 import {
   NOTE_LINK_KINDS,
   type CatalogApp,
+  type Department,
   type Note,
   type NoteLink,
   type NoteLinkKind,
@@ -53,6 +54,7 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
   const [noteDate, setNoteDate] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [links, setLinks] = useState<NoteLink[]>([]);
+  const [departmentId, setDepartmentId] = useState("");
 
   const { data: apps } = useQuery({
     queryKey: ["apps"],
@@ -62,6 +64,11 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
   const { data: servers } = useQuery({
     queryKey: ["servers"],
     queryFn: () => apiGet<Server[]>("/servers"),
+    enabled: open,
+  });
+  const { data: departments } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => apiGet<Department[]>("/departments"),
     enabled: open,
   });
   const { data: pics } = useQuery({
@@ -78,6 +85,7 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
     setNoteDate(initial?.note_date ?? today);
     setExpiresAt(initial?.expires_at ?? addDays(today, 7));
     setLinks(initial?.links ?? []);
+    setDepartmentId(initial?.department_id ?? "");
   }, [open, initial]);
 
   const save = useMutation({
@@ -85,6 +93,7 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
       initial ? apiPut<Note>(`/notes/${initial.id}`, payload) : apiPost<Note>("/notes", payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notes"] });
+      queryClient.invalidateQueries({ queryKey: ["note-alerts"] });
       toast.success(initial ? "Note updated" : "Note saved");
       onOpenChange(false);
     },
@@ -120,6 +129,7 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
       note_date: noteDate,
       expires_at: expiresAt,
       links,
+      department_id: departmentId,
     });
   };
 
@@ -160,6 +170,30 @@ export function NoteFormDialog({ open, onOpenChange, initial }: NoteFormDialogPr
               data-testid="note-form-body-input"
               placeholder="What happened, what to watch, what to do next…"
             />
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="note-form-department">Share with</Label>
+            <Select
+              value={departmentId || "__all__"}
+              onValueChange={(value) => setDepartmentId(value === "__all__" ? "" : value)}
+            >
+              <SelectTrigger id="note-form-department" data-testid="note-form-department-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                <SelectItem value="__all__">Everyone</SelectItem>
+                {(departments ?? []).map((department) => (
+                  <SelectItem key={department.id} value={department.id}>
+                    {department.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              A department-shared note is visible to that department and administrators, and anyone
+              in it can edit the note.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

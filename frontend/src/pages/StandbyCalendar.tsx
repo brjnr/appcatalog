@@ -2,20 +2,23 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus, Users, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, Repeat, Users, X } from "lucide-react";
 import { apiDelete, apiErrorMessage, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { InfraNavProvider, useInfraNav } from "@/lib/infraNav";
 import type {
   CatalogApp,
+  Department,
   Pic,
   SessionUser,
   StandbyCalendar as StandbyCalendarData,
   StandbyCalendarEntry,
+  StandbyRotateResult,
   StandbyUpcoming,
 } from "@/lib/types";
 import { slugify } from "@/lib/types";
 import { AppNavbar } from "@/components/catalog/AppNavbar";
 import { PicDrawer } from "@/components/catalog/PicDrawer";
+import { SearchSelect } from "@/components/catalog/SearchSelect";
 import { ServerDrawer } from "@/components/catalog/ServerDrawer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -83,7 +87,8 @@ function StandbyCalendar() {
   const queryClient = useQueryClient();
   const { openPic } = useInfraNav();
   const [month, setMonth] = useState<string | null>(null);
-  const [team, setTeam] = useState<string | null>(null);
+  const [departmentId, setDepartmentId] = useState(""); // "" = all departments
+  const [rotateOpen, setRotateOpen] = useState(false);
   const [addDate, setAddDate] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
 
@@ -93,6 +98,12 @@ function StandbyCalendar() {
     retry: false,
   });
   const isAdmin = user?.role === "administrator";
+
+  const { data: departments } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => apiGet<Department[]>("/departments"),
+    enabled: Boolean(user),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["standby", month],
@@ -171,13 +182,18 @@ function StandbyCalendar() {
   }, [activeMonth]);
 
   const allEntries = data?.entries ?? [];
-  const teamCounts = useMemo(() => {
+  const countsByDepartment = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const entry of allEntries) counts.set(teamOf(entry), (counts.get(teamOf(entry)) ?? 0) + 1);
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    for (const entry of allEntries) {
+      counts.set(entry.pic_department_id, (counts.get(entry.pic_department_id) ?? 0) + 1);
+    }
+    return counts;
   }, [allEntries]);
 
-  const entries = team ? allEntries.filter((entry) => teamOf(entry) === team) : allEntries;
+  const entries = departmentId
+    ? allEntries.filter((entry) => entry.pic_department_id === departmentId)
+    : allEntries;
+  const selectedDepartment = (departments ?? []).find((d) => d.id === departmentId) ?? null;
 
   const byDate = useMemo(() => {
     const map = new Map<string, StandbyCalendarEntry[]>();
@@ -261,53 +277,48 @@ function StandbyCalendar() {
           </div>
         </div>
 
-        {/* Today / next days, grouped by team */}
+        {/* Today / next days, grouped by department */}
         <UpcomingPanel
           upcoming={upcoming ?? null}
           onOpenPic={openPic}
-          activeTeam={team}
-          onPickTeam={(picked) => setTeam((prev) => (prev === picked ? null : picked))}
+          activeDepartmentId={departmentId}
+          onPickDepartment={(picked) => setDepartmentId((prev) => (prev === picked ? "" : picked))}
         />
 
-        {/* Team filter */}
-        <div className="mt-6 flex flex-wrap items-center gap-1.5" data-testid="standby-department-filter">
-          <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            <Users className="h-3.5 w-3.5" aria-hidden="true" /> Departments
+        {/* Department picker (searchable) + rotation */}
+        <div className="mt-6 flex flex-wrap items-center gap-2" data-testid="standby-department-filter">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <Users className="h-3.5 w-3.5" aria-hidden="true" /> Department
           </span>
-          <button
-            type="button"
-            data-testid="standby-department-all"
-            onClick={() => setTeam(null)}
-            className={cn(
-              "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
-              team === null
-                ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                : "border-border text-muted-foreground hover:bg-muted",
-            )}
-          >
-            All ({allEntries.length})
-          </button>
-          {teamCounts.map(([name, count]) => (
-            <button
-              key={name}
-              type="button"
-              data-testid={`standby-department-${slugify(name)}`}
-              onClick={() => setTeam((prev) => (prev === name ? null : name))}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-150",
-                team === name
-                  ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                  : "border-border text-muted-foreground hover:bg-muted",
-              )}
+          <SearchSelect
+            testid="standby-department-select"
+            value={departmentId}
+            onChange={setDepartmentId}
+            allLabel={`All departments (${allEntries.length})`}
+            placeholder="Search departments…"
+            options={(departments ?? []).map((department) => ({
+              id: department.id,
+              label: department.name,
+              hint: String(countsByDepartment.get(department.id) ?? 0),
+            }))}
+          />
+          {isAdmin && (
+            <Button
+              variant="outline"
+              className="h-9"
+              data-testid="standby-rotate-btn"
+              onClick={() => setRotateOpen(true)}
             >
-              {name} ({count})
-            </button>
-          ))}
+              <Repeat className="h-4 w-4" aria-hidden="true" /> Auto-fill month
+            </Button>
+          )}
         </div>
 
         <p className="mt-3 text-sm text-muted-foreground" data-testid="standby-shift-count">
           {isLoading ? "Loading roster…" : `${entries.length} shift(s) this month`}
-          {team ? ` · ${team}` : ""}
+          {selectedDepartment
+            ? ` · ${selectedDepartment.name} — cells show the PIC on standby`
+            : ""}
         </p>
 
         {/* Month grid */}
@@ -397,7 +408,7 @@ function StandbyCalendar() {
                             {entry.pic_initials}
                           </span>
                           <span className="min-w-0 truncate text-[11px] font-medium text-foreground">
-                            {entry.application_name}
+                            {departmentId ? entry.pic_name : entry.application_name}
                           </span>
                         </button>
                         {isAdmin && (
@@ -470,6 +481,16 @@ function StandbyCalendar() {
       </main>
 
       {isAdmin && (
+        <RotateDialog
+          open={rotateOpen}
+          onOpenChange={setRotateOpen}
+          month={activeMonth ?? ""}
+          departments={departments ?? []}
+          defaultDepartmentId={departmentId}
+          onDone={refresh}
+        />
+      )}
+      {isAdmin && (
         <AddShiftDialog
           date={addDate}
           onClose={() => setAddDate(null)}
@@ -483,17 +504,18 @@ function StandbyCalendar() {
   );
 }
 
-// Today + the next days, with team chips: click a team to see who covers it that day.
+// Today + the next days, grouped by department: click a department to see which PICs
+// cover it that day.
 function UpcomingPanel({
   upcoming,
   onOpenPic,
-  activeTeam,
-  onPickTeam,
+  activeDepartmentId,
+  onPickDepartment,
 }: {
   upcoming: StandbyUpcoming | null;
   onOpenPic: (id: string) => void;
-  activeTeam: string | null;
-  onPickTeam: (team: string) => void;
+  activeDepartmentId: string;
+  onPickDepartment: (departmentId: string) => void;
 }) {
   const [open, setOpen] = useState<string | null>(null); // "date::team"
 
@@ -539,11 +561,12 @@ function UpcomingPanel({
                       data-testid={`standby-day-department-${date}-${slugify(name)}`}
                       onClick={() => {
                         setOpen((prev) => (prev === key ? null : key));
-                        onPickTeam(name);
+                        onPickDepartment(rows[0]?.pic_department_id ?? "");
                       }}
                       className={cn(
                         "flex w-full items-center justify-between rounded-md border px-2 py-1 text-left text-xs font-semibold transition-colors duration-150",
-                        expanded || activeTeam === name
+                        expanded || (activeDepartmentId !== "" &&
+                          rows[0]?.pic_department_id === activeDepartmentId)
                           ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
                           : "border-border text-foreground hover:bg-muted",
                       )}
@@ -688,6 +711,137 @@ function AddShiftDialog({
             }}
           >
             {pending ? "Saving…" : "Add shift"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Admin-only: round-robin a department's PICs across every day of the displayed month.
+function RotateDialog({
+  open,
+  onOpenChange,
+  month,
+  departments,
+  defaultDepartmentId,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  month: string;
+  departments: Department[];
+  defaultDepartmentId: string;
+  onDone: () => void;
+}) {
+  const [department, setDepartment] = useState(defaultDepartmentId);
+  const [appId, setAppId] = useState("");
+  const [replace, setReplace] = useState(true);
+  const [weekends, setWeekends] = useState(true);
+
+  const { data: apps } = useQuery({
+    queryKey: ["apps"],
+    queryFn: () => apiGet<CatalogApp[]>("/apps"),
+    enabled: open,
+  });
+
+  const rotate = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<StandbyRotateResult>("/standby/rotate", payload),
+    onSuccess: (result) => {
+      onDone();
+      onOpenChange(false);
+      toast.success(
+        `${result.department_name}: ${result.created} shift(s) created across ${result.pics_used} PIC(s)`,
+      );
+    },
+    onError: (error) => toast.error(apiErrorMessage(error)),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="standby-rotate-dialog" className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Auto-fill {month}</DialogTitle>
+          <DialogDescription>
+            Rotates every active PIC in the department day by day across the whole month.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label>Department</Label>
+            <SearchSelect
+              testid="rotate-department-select"
+              value={department}
+              onChange={setDepartment}
+              allLabel="Select a department"
+              placeholder="Search departments…"
+              className="w-full"
+              options={departments.map((d) => ({
+                id: d.id,
+                label: d.name,
+                hint: `${d.pic_count} PIC`,
+              }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="rotate-app">Application (optional)</Label>
+            <Select
+              value={appId || "__own__"}
+              onValueChange={(value) => setAppId(value === "__own__" ? "" : value)}
+            >
+              <SelectTrigger id="rotate-app" data-testid="rotate-app-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                <SelectItem value="__own__">Each PIC's own application</SelectItem>
+                {(apps ?? []).map((app) => (
+                  <SelectItem key={app.id} value={app.id}>
+                    {app.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <Checkbox
+              checked={replace}
+              onCheckedChange={(checked) => setReplace(checked === true)}
+              data-testid="rotate-replace-checkbox"
+            />
+            Clear this department's existing shifts in {month} first
+          </label>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <Checkbox
+              checked={weekends}
+              onCheckedChange={(checked) => setWeekends(checked === true)}
+              data-testid="rotate-weekends-checkbox"
+            />
+            Include weekends
+          </label>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="rotate-cancel-btn">
+            Cancel
+          </Button>
+          <Button
+            disabled={rotate.isPending}
+            data-testid="rotate-submit-btn"
+            onClick={() => {
+              if (!department) {
+                toast.error("Pick a department to rotate");
+                return;
+              }
+              rotate.mutate({
+                department_id: department,
+                month,
+                application_id: appId || null,
+                replace_existing: replace,
+                include_weekends: weekends,
+              });
+            }}
+          >
+            {rotate.isPending ? "Filling…" : "Fill month"}
           </Button>
         </DialogFooter>
       </DialogContent>

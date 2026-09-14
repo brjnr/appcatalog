@@ -19,13 +19,19 @@ class MeResponse(BaseModel):
     user: UserOut | None = None
 
 
-def _user_out(doc: dict) -> UserOut:
+async def _user_out(doc: dict) -> UserOut:
+    department_id = doc.get("department_id", "") or ""
+    department = (
+        await db.departments.find_one({"id": department_id}, {"name": 1}) if department_id else None
+    )
     return UserOut(
         id=doc["id"],
         name=doc["name"],
         email=doc["email"],
         role=doc.get("role", "normal_user"),
         assigned_category_ids=list(doc.get("assigned_category_ids") or []),
+        department_id=department_id,
+        department_name=department["name"] if department else "",
         is_active=bool(doc.get("is_active", True)),
     )
 
@@ -38,7 +44,7 @@ async def login(input: LoginRequest, response: Response):
     if not user.get("is_active", True):
         raise HTTPException(status_code=403, detail="this account has been deactivated")
     await create_session(response, user["id"])
-    return _user_out(user)
+    return await _user_out(user)
 
 
 @router.get("/auth/me", response_model=UserOut | None)
@@ -46,7 +52,7 @@ async def me(request: Request):
     """Who am I — returns the session user, or null when logged out (200, so the
     frontend can redirect without treating it as an error)."""
     user = await load_user_from_request(request)
-    return _user_out(user) if user else None
+    return await _user_out(user) if user else None
 
 
 @router.post("/auth/logout", status_code=204)

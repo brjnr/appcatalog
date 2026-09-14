@@ -36,12 +36,14 @@ USER_SEEDS = [
         "password": "admin123",
         "role": "administrator",
         "assigned_category_ids": [],  # admins are unrestricted
+        "department": "Infrastructure",
     },
     {
         "name": "John Doe",
         "email": "john.doe@corp.com",
         "password": "user123",
         "role": "normal_user",
+        "department": "Security",
         "assigned_categories": ["Security", "Monitoring"],
     },
     {
@@ -49,6 +51,7 @@ USER_SEEDS = [
         "email": "maria.garcia@corp.com",
         "password": "user123",
         "role": "normal_user",
+        "department": "Business Applications",
         "assigned_categories": ["HR", "Finance"],
     },
 ]
@@ -359,6 +362,16 @@ async def seed() -> None:
                 "updated_at": now,
             }
         )
+
+    # Users belong to a department too (drives note sharing / editing).
+    for dept_name, dept_id in department_ids.items():
+        await db.users.update_many(
+            {"email": {"$in": [u["email"] for u in USER_SEEDS if u.get("department") == dept_name]}},
+            {"$set": {"department_id": dept_id}},
+        )
+
+    # Notes are transient scratch data — start clean.
+    await db.notes.delete_many({})
 
     # PICs first (servers reference them by id)
     await db.pics.delete_many({})

@@ -9,6 +9,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from lib.auth import require_user
 from lib.dates import today_iso
@@ -70,7 +71,35 @@ async def _resolve_links(docs: list[dict]) -> dict[tuple[str, str], str]:
     return names
 
 
-def _to_out(doc: dict, user: dict, names: dict[tuple[str, str], str]) -> NoteOut:
+def _can_edit(doc: dict, user: dict) -> bool:
+    """Author, anyone in the same department the note was shared with, or an administrator."""
+    if user["role"] == "administrator" or doc.get("author_id") == user["id"]:
+        return True
+    department_id = doc.get("department_id") or ""
+    return bool(department_id) and department_id == (user.get("department_id") or "")
+
+
+def _visibility_filter(user: dict) -> dict:
+    """Admins see everything; everyone else sees company-wide notes, their department's
+    notes, and their own."""
+    if user["role"] == "administrator":
+        return {}
+    return {
+        "$or": [
+            {"department_id": ""},
+            {"department_id": {"$exists": False}},
+            {"department_id": user.get("department_id") or "__none__"},
+            {"author_id": user["id"]},
+        ]
+    }
+
+
+def _to_out(
+    doc: dict,
+    user: dict,
+    names: dict[tuple[str, str], str],
+    department_names: dict[str, str] | None = None,
+) -> NoteOut:
     today = today_iso()
     base = Note(**doc)
     trashed_at = base.trashed_at
@@ -88,7 +117,8 @@ def _to_out(doc: dict, user: dict, names: dict[tuple[str, str], str]) -> NoteOut
             if trashed_at
             else None
         ),
-        can_edit=user["role"] == "administrator" or base.author_id == user["id"],
+        department_name=(department_names or {}).get(base.department_id, ""),
+        can_edit=_can_edit(doc, user),
     )
 
 
@@ -100,40 +130,129 @@ async def _validate_links(links: list) -> None:
             raise HTTPException(status_code=422, detail=f"linked {kind} does not exist")
 
 
+async def _department_names() -> dict[str, str]:
+    docs = await db.departments.find({}, {"id": 1, "name": 1}).to_list(500)
+    return {d["id"]: d["name"] for d in docs}
+
+
+async def _validate_department(department_id: str | None) -> None:
+    if not department_id:
+        return
+    if not await db.departments.find_one({"id": department_id}, {"id": 1}):
+        raise HTTPException(status_code=422, detail="department does not exist")
+
+
 async def _load_editable(note_id: str, user: dict) -> dict:
     doc = await db.notes.find_one({"id": note_id})
     if not doc:
         raise HTTPException(status_code=404, detail="note not found")
-    if user["role"] != "administrator" and doc["author_id"] != user["id"]:
+    if not _can_edit(doc, user):
         raise HTTPException(
-            status_code=403, detail="only the author or an administrator can change this note"
+            status_code=403,
+            detail="only the author, their department, or an administrator can change this note",
         )
     return doc
+
+
+SORTS: dict[str, tuple[str, int]] = {
+    "newest": ("note_date", -1),
+    "oldest": ("note_date", 1),
+    "expiring": ("expires_at", 1),
+    "recently_updated": ("updated_at", -1),
+    "title": ("title", 1),
+}
 
 
 @router.get("/notes", response_model=list[NoteOut])
 async def list_notes(
     view: str = "active",
     q: str | None = None,
+    sort: str = "newest",
+    department_id: str | None = None,
     user: dict = Depends(require_user),
 ):
     if view not in {"active", "trash"}:
         raise HTTPException(status_code=422, detail="view must be 'active' or 'trash'")
+    if sort not in SORTS:
+        raise HTTPException(status_code=422, detail=f"sort must be one of {sorted(SORTS)}")
     await _sweep()
 
-    query: dict = {"status": "trashed" if view == "trash" else "active"}
+    conditions: list[dict] = [
+        {"status": "trashed" if view == "trash" else "active"},
+        _visibility_filter(user),
+    ]
+    if department_id:
+        conditions.append({"department_id": department_id})
     if q and q.strip():
         rx = {"$regex": re.escape(q.strip()), "$options": "i"}
-        query["$or"] = [{"title": rx}, {"body": rx}, {"author_name": rx}]
+        conditions.append({"$or": [{"title": rx}, {"body": rx}, {"author_name": rx}]})
+    query = {"$and": [c for c in conditions if c]}
 
-    docs = await db.notes.find(query).sort("note_date", -1).to_list(1000)
+    field, direction = SORTS[sort]
+    # Pinned notes always float to the top, then the chosen sort applies.
+    docs = await db.notes.find(query).sort([("pinned", -1), (field, direction)]).to_list(1000)
     names = await _resolve_links(docs)
-    return [_to_out(doc, user, names) for doc in docs]
+    departments = await _department_names()
+    return [_to_out(doc, user, names, departments) for doc in docs]
+
+
+class NoteAlert(BaseModel):
+    id: str
+    title: str
+    expires_at: str
+    days_left: int
+    pinned: bool
+    targets: list[str]  # names of the linked applications / servers
+
+
+class NoteAlerts(BaseModel):
+    within_days: int
+    count: int
+    items: list[NoteAlert]
+
+
+@router.get("/notes/alerts", response_model=NoteAlerts)
+async def note_alerts(within_days: int = 2, user: dict = Depends(require_user)):
+    """Notes about an application or server that expire within `within_days` — drives the
+    navbar badge."""
+    if within_days < 0 or within_days > 30:
+        raise HTTPException(status_code=422, detail="within_days must be between 0 and 30")
+    await _sweep()
+    today = today_iso()
+    horizon = _date_add(today, within_days)
+
+    query = {
+        "$and": [
+            {"status": "active"},
+            {"expires_at": {"$lte": horizon}},
+            {"links.kind": {"$in": ["application", "server"]}},
+            _visibility_filter(user),
+        ]
+    }
+    docs = await db.notes.find(query).sort([("pinned", -1), ("expires_at", 1)]).to_list(200)
+    names = await _resolve_links(docs)
+    items = [
+        NoteAlert(
+            id=doc["id"],
+            title=doc["title"],
+            expires_at=doc["expires_at"],
+            days_left=_days_between(today, doc["expires_at"]),
+            pinned=bool(doc.get("pinned")),
+            targets=[
+                names.get((link.get("kind", ""), link.get("id", "")), "(removed)")
+                for link in (doc.get("links") or [])
+                if link.get("kind") in {"application", "server"}
+            ],
+        )
+        for doc in docs
+    ]
+    return NoteAlerts(within_days=within_days, count=len(items), items=items)
 
 
 @router.post("/notes", response_model=NoteOut, status_code=201)
 async def create_note(input: NoteCreate, user: dict = Depends(require_user)):
     await _validate_links(input.links)
+    await _validate_department(input.department_id)
     today = today_iso()
     note_date = input.note_date or today
     expires_at = input.expires_at or _date_add(note_date, DEFAULT_VALID_DAYS)
@@ -145,13 +264,15 @@ async def create_note(input: NoteCreate, user: dict = Depends(require_user)):
         body=input.body,
         author_id=user["id"],
         author_name=user["name"],
+        department_id=input.department_id,
+        pinned=input.pinned,
         note_date=note_date,
         expires_at=expires_at,
         links=input.links,
     )
     await db.notes.insert_one(note.model_dump())
     names = await _resolve_links([note.model_dump()])
-    return _to_out(note.model_dump(), user, names)
+    return _to_out(note.model_dump(), user, names, await _department_names())
 
 
 @router.put("/notes/{note_id}", response_model=NoteOut)
@@ -162,6 +283,8 @@ async def update_note(note_id: str, input: NoteUpdate, user: dict = Depends(requ
         raise HTTPException(status_code=400, detail="no fields to update")
     if input.links is not None:
         await _validate_links(input.links)
+    if input.department_id is not None:
+        await _validate_department(input.department_id)
 
     note_date = changes.get("note_date") or doc["note_date"]
     expires_at = changes.get("expires_at") or doc["expires_at"]
@@ -172,7 +295,19 @@ async def update_note(note_id: str, input: NoteUpdate, user: dict = Depends(requ
     doc.update(changes)
     await db.notes.update_one({"id": note_id}, {"$set": changes})
     names = await _resolve_links([doc])
-    return _to_out(doc, user, names)
+    return _to_out(doc, user, names, await _department_names())
+
+
+@router.patch("/notes/{note_id}/pin", response_model=NoteOut)
+async def toggle_pin(note_id: str, user: dict = Depends(require_user)):
+    """Pin/unpin a note so the on-call team sees it first."""
+    doc = await _load_editable(note_id, user)
+    pinned = not bool(doc.get("pinned"))
+    changes = {"pinned": pinned, "updated_at": datetime.now(timezone.utc)}
+    doc.update(changes)
+    await db.notes.update_one({"id": note_id}, {"$set": changes})
+    names = await _resolve_links([doc])
+    return _to_out(doc, user, names, await _department_names())
 
 
 @router.post("/notes/{note_id}/restore", response_model=NoteOut)
@@ -192,7 +327,7 @@ async def restore_note(note_id: str, user: dict = Depends(require_user)):
     doc.update(changes)
     await db.notes.update_one({"id": note_id}, {"$set": changes})
     names = await _resolve_links([doc])
-    return _to_out(doc, user, names)
+    return _to_out(doc, user, names, await _department_names())
 
 
 @router.delete("/notes/{note_id}", status_code=204)

@@ -1,6 +1,7 @@
 """PIC (person in charge) endpoints — scoped reads, admin-only mutations."""
 
 import re
+from calendar import monthrange
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -303,6 +304,113 @@ async def delete_standby_shift(
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="PIC not found")
     return None
+
+
+class StandbyRotateInput(BaseModel):
+    """Auto-fill a month by rotating a department's PICs day by day."""
+
+    department_id: str
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    application_id: str | None = None  # default: each PIC's first assigned application
+    replace_existing: bool = False  # wipe that department's shifts in the month first
+    include_weekends: bool = True
+
+
+class StandbyRotateResult(BaseModel):
+    month: str
+    department_name: str
+    pics_used: int
+    created: int
+    skipped: int
+    entries: list[StandbyCalendarEntry]
+
+
+@router.post("/standby/rotate", response_model=StandbyRotateResult)
+async def rotate_standby(input: StandbyRotateInput, _: dict = Depends(require_admin)):
+    """Round-robin every active PIC in a department across the days of the month."""
+    department = await db.departments.find_one({"id": input.department_id})
+    if not department:
+        raise HTTPException(status_code=404, detail="department not found")
+
+    pics = await db.pics.find(
+        {"department_id": input.department_id, "status": "Active"}
+    ).sort("name", 1).to_list(200)
+    if not pics:
+        raise HTTPException(
+            status_code=422, detail="this department has no active PICs to rotate"
+        )
+
+    if input.application_id and not await db.apps.find_one({"id": input.application_id}, {"id": 1}):
+        raise HTTPException(status_code=422, detail="application does not exist")
+
+    year, month_no = (int(part) for part in input.month.split("-"))
+    days_in_month = monthrange(year, month_no)[1]
+
+    if input.replace_existing:
+        for pic in pics:
+            await db.pics.update_one(
+                {"id": pic["id"]},
+                {"$pull": {"standby_schedule": {"date": {"$regex": f"^{input.month}"}}}},
+            )
+            pic["standby_schedule"] = [
+                e
+                for e in (pic.get("standby_schedule") or [])
+                if not str(e.get("date", "")).startswith(input.month)
+            ]
+
+    created = 0
+    skipped = 0
+    for index in range(days_in_month):
+        day = index + 1
+        date = f"{input.month}-{day:02d}"
+        if not input.include_weekends and datetime.strptime(date, "%Y-%m-%d").weekday() >= 5:
+            continue
+        pic = pics[index % len(pics)]
+        app_id = input.application_id or next(iter(pic.get("application_ids") or []), None)
+        if not app_id:
+            skipped += 1
+            continue
+        schedule = pic.get("standby_schedule") or []
+        if any(e.get("date") == date and e.get("application_id") == app_id for e in schedule):
+            skipped += 1
+            continue
+        entry = {"date": date, "application_id": app_id, "notes": "Auto-filled rotation"}
+        schedule.append(entry)
+        pic["standby_schedule"] = schedule
+        await db.pics.update_one(
+            {"id": pic["id"]},
+            {"$push": {"standby_schedule": entry}, "$set": {"updated_at": datetime.now(timezone.utc)}},
+        )
+        created += 1
+
+    app_names = await app_name_map(
+        {e.get("application_id", "") for p in pics for e in (p.get("standby_schedule") or [])}
+    )
+    entries = [
+        StandbyCalendarEntry(
+            date=e["date"],
+            pic_id=pic["id"],
+            pic_name=pic["name"],
+            pic_initials=pic.get("initials", ""),
+            pic_department_id=pic.get("department_id", ""),
+            pic_department=pic.get("department", ""),
+            application_id=e.get("application_id", ""),
+            application_name=app_names.get(e.get("application_id", ""), "—"),
+            notes=e.get("notes", ""),
+        )
+        for pic in pics
+        for e in (pic.get("standby_schedule") or [])
+        if str(e.get("date", "")).startswith(input.month)
+    ]
+    entries.sort(key=lambda e: (e.date, e.pic_name))
+    return StandbyRotateResult(
+        month=input.month,
+        department_name=department["name"],
+        pics_used=len(pics),
+        created=created,
+        skipped=skipped,
+        entries=entries,
+    )
 
 
 @router.get("/pics", response_model=list[PicOut])

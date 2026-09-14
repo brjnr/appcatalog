@@ -15,6 +15,8 @@ class UserOut(BaseModel):
     email: str
     role: Role
     assigned_category_ids: list[str] = Field(default_factory=list)
+    department_id: str = ""  # -> departments.id; drives note sharing/editing by department
+    department_name: str = ""
     is_active: bool = True
 
 
@@ -29,6 +31,7 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=6, max_length=128)
     role: Role = "normal_user"
     assigned_category_ids: list[str] = Field(default_factory=list)
+    department_id: str = Field(default="", max_length=60)
     is_active: bool = True
 
 
@@ -38,4 +41,5 @@ class UserUpdate(BaseModel):
     password: str | None = Field(default=None, min_length=6, max_length=128)
     role: Role | None = None
     assigned_category_ids: list[str] | None = None
+    department_id: str | None = Field(default=None, max_length=60)
     is_active: bool | None = None

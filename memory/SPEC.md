@@ -93,7 +93,8 @@ never cropped/stretched); the upload dialog warns on non-square images and shows
   + user × category matrix).
 
 ## Seed data (`cd /app/backend && python seed.py`)
-8 categories, 3 users, 36 applications, 14 servers, 6 PICs, 5 departments (PICs linked by
+8 categories, 3 users (admin→Infrastructure, john.doe→Security, maria.garcia→Business
+Applications), 36 applications, 14 servers, 6 PICs, 5 departments (PICs linked by
 `department_id`), 11 DC + 3 DRC servers. Idempotent (clears
 sessions/users/categories/apps/servers/pics first). `STG-TEST-01` is intentionally left with no
 application and no PIC to exercise standalone registration. Credentials in
@@ -119,7 +120,9 @@ application and no PIC to exercise standalone registration. Credentials in
   deleting a department with PICs returns **409**.
 - `Pic.department_id` → departments.id, with the department **name** denormalised on `pic.department`
   (backend keeps it in sync). The PIC form picks the department from a dropdown.
-- Admin page `/admin/departments` (menu "Departments").
+- Admin page `/admin/departments` (menu "Departments"). Clicking a department name opens a
+  **detail dialog**: description, status, PIC list (badges open the `PicDrawer`) and the portal users
+  who may edit that department's notes.
 
 ## Standby editing, grouping, and upcoming view
 - `GET /api/standby?month=YYYY-MM` entries now carry `pic_department_id` + `pic_department`.
@@ -130,6 +133,12 @@ application and no PIC to exercise standalone registration. Credentials in
 - `/standby` page: department filter chips with counts, a Today/Tomorrow/+2 panel where clicking a
   department chip reveals the PICs covering it that day, HTML5 **drag a shift to another day** to
   reschedule (admins), a per-day `+` to add a shift, and an `x` to remove one.
+- The department filter is a **searchable dropdown** (`SearchSelect`) with per-department shift
+  counts; while a department is selected the month cells show the **PIC on standby** instead of the
+  application name.
+- **Rotation**: `POST /api/standby/rotate` `{department_id, month, application_id?,
+  replace_existing, include_weekends}` round-robins the department's active PICs across the month
+  (each PIC's first assigned application by default) → "Auto-fill month" button on `/standby`.
 
 ## Notes & memos (`/notes`)
 - `models/notes.py` + `routers/notes.py`. `Note`: title, body, author_id/author_name (from the
@@ -140,8 +149,18 @@ application and no PIC to exercise standalone registration. Credentials in
   (403 otherwise). `GET /api/notes?view=active|trash&q=` runs the sweep first: expired notes →
   Trash, Trash older than 7 days → purged. `POST /notes/{id}/restore` pulls one back (pushing a
   lapsed retention date forward); `DELETE /notes/{id}[?permanent=true]` trashes then purges.
-- Page has Active / Deleted tabs, search, and clickable linked chips (application → detail page,
-  server/PIC → drawer).
+- **Sharing/editing by department**: `Note.department_id` — "" = everyone, otherwise only that
+  department + admins can see it, and the author, that department's members, **and admins** can edit
+  (`_can_edit` / `_visibility_filter` in routers/notes.py). Users carry `department_id`
+  (`UserOut.department_name` resolved) set in the admin user form.
+- **Pinning**: `Note.pinned` + `PATCH /api/notes/{id}/pin`; pinned notes always sort first.
+- **Sorting**: `GET /api/notes?sort=newest|oldest|expiring|recently_updated|title` (+ `department_id`
+  filter, `q` search); 422 on an unknown sort.
+- **Alerts**: `GET /api/notes/alerts?within_days=2` → notes linked to an application/server expiring
+  soon; drives the amber badge on the navbar Notes icon (`notes-alert-badge`).
+- Page: Active / Deleted tabs, searchable department filter + sort dropdowns
+  (`components/catalog/SearchSelect.tsx`), cards click through to a **detail popup**
+  (`NoteDetailDialog`) with pin / edit / delete and clickable linked items.
 
 ## Site (location) filters
 - Admin Servers list and `/admin/dependency-map` both have DC/DRC/Cloud/Co-location filter chips

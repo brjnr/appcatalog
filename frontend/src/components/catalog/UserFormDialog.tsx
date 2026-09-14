@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiErrorMessage, apiGet, apiPost, apiPut } from "@/lib/api";
-import type { AppCategory, Role, SessionUser } from "@/lib/types";
+import type { AppCategory, Department, Role, SessionUser } from "@/lib/types";
 import { ROLE_LABELS, slugify } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,6 +40,13 @@ export function UserFormDialog({ open, onOpenChange, initial }: UserFormDialogPr
   const [isActive, setIsActive] = useState(true);
   const [assignedIds, setAssignedIds] = useState<string[]>([]);
 
+  const [departmentId, setDepartmentId] = useState("");
+
+  const { data: departments } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => apiGet<Department[]>("/departments"),
+    enabled: open,
+  });
   const { data: categories } = useQuery({
     queryKey: ["categories"],
     queryFn: () => apiGet<AppCategory[]>("/categories"),
@@ -54,6 +61,7 @@ export function UserFormDialog({ open, onOpenChange, initial }: UserFormDialogPr
     setRole(initial?.role ?? "normal_user");
     setIsActive(initial?.is_active ?? true);
     setAssignedIds(initial?.assigned_category_ids ?? []);
+    setDepartmentId(initial?.department_id ?? "");
   }, [open, initial]);
 
   const saveMutation = useMutation({
@@ -82,6 +90,7 @@ export function UserFormDialog({ open, onOpenChange, initial }: UserFormDialogPr
       email: email.trim(),
       role,
       assigned_category_ids: assignedIds,
+      department_id: departmentId,
       is_active: isActive,
     };
     if (password) payload.password = password;
@@ -160,6 +169,29 @@ export function UserFormDialog({ open, onOpenChange, initial }: UserFormDialogPr
                 <SelectItem value="administrator">Administrator</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="user-form-department">Department</Label>
+            <Select
+              value={departmentId || "__none__"}
+              onValueChange={(value) => setDepartmentId(value === "__none__" ? "" : value)}
+            >
+              <SelectTrigger id="user-form-department" data-testid="user-form-department-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                <SelectItem value="__none__">No department</SelectItem>
+                {(departments ?? []).map((department) => (
+                  <SelectItem key={department.id} value={department.id}>
+                    {department.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Members of a department can read and edit notes shared with it.
+            </p>
           </div>
 
           <div className="grid gap-1.5">

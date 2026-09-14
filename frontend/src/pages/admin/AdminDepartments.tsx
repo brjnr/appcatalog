@@ -3,7 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Building, Pencil, Plus, Trash2 } from "lucide-react";
 import { apiDelete, apiErrorMessage, apiGet, apiPost, apiPut } from "@/lib/api";
-import { DEPARTMENT_STATUSES, slugify, type Department } from "@/lib/types";
+import { InfraNavProvider, useInfraNav } from "@/lib/infraNav";
+import { DEPARTMENT_STATUSES, slugify, type Department, type Pic, type SessionUser } from "@/lib/types";
+import { PicBadge } from "@/components/catalog/PicBadge";
+import { PicDrawer } from "@/components/catalog/PicDrawer";
+import { ServerDrawer } from "@/components/catalog/ServerDrawer";
 import { ConfirmDeleteDialog } from "@/components/catalog/ConfirmDeleteDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,11 +32,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 // Departments admin: the organisational units PICs belong to, which in turn group the
 // standby calendar (who is on standby in this department today, tomorrow, …).
-export default function AdminDepartments() {
+export default function AdminDepartmentsPage() {
+  return (
+    <InfraNavProvider>
+      <AdminDepartments />
+    </InfraNavProvider>
+  );
+}
+
+function AdminDepartments() {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Department | null>(null);
   const [deleting, setDeleting] = useState<Department | null>(null);
+  const [detail, setDetail] = useState<Department | null>(null);
 
   const { data: departments, isLoading } = useQuery({
     queryKey: ["departments", "admin"],
@@ -103,7 +116,16 @@ export default function AdminDepartments() {
                 const slug = slugify(department.name);
                 return (
                   <TableRow key={department.id} data-testid={`department-row-${slug}`}>
-                    <TableCell className="font-medium text-foreground">{department.name}</TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        onClick={() => setDetail(department)}
+                        data-testid={`department-name-btn-${slug}`}
+                        className="font-medium text-sky-700 transition-colors hover:underline dark:text-sky-300"
+                      >
+                        {department.name}
+                      </button>
+                    </TableCell>
                     <TableCell className="max-w-sm text-sm text-muted-foreground">
                       {department.description || "—"}
                     </TableCell>
@@ -151,6 +173,15 @@ export default function AdminDepartments() {
         </Table>
       </div>
 
+      <DepartmentDetailDialog
+        department={detail}
+        onOpenChange={(open) => !open && setDetail(null)}
+        onEdit={(department) => {
+          setDetail(null);
+          setEditing(department);
+          setFormOpen(true);
+        }}
+      />
       <DepartmentFormDialog open={formOpen} onOpenChange={setFormOpen} initial={editing} />
       <ConfirmDeleteDialog
         open={deleting !== null}
@@ -160,7 +191,140 @@ export default function AdminDepartments() {
         pending={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting)}
       />
+      <PicDrawer />
+      <ServerDrawer />
     </div>
+  );
+}
+
+// Department detail: description, status, the users assigned to it, and its PICs —
+// each PIC badge opens the PIC drawer.
+function DepartmentDetailDialog({
+  department,
+  onOpenChange,
+  onEdit,
+}: {
+  department: Department | null;
+  onOpenChange: (open: boolean) => void;
+  onEdit: (department: Department) => void;
+}) {
+  const { openPic } = useInfraNav();
+
+  const { data: pics } = useQuery({
+    queryKey: ["pics"],
+    queryFn: () => apiGet<Pic[]>("/pics"),
+    enabled: department !== null,
+  });
+  const { data: users } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => apiGet<SessionUser[]>("/users"),
+    enabled: department !== null,
+  });
+
+  const members = (pics ?? []).filter((pic) => pic.department_id === department?.id);
+  const portalUsers = (users ?? []).filter((user) => user.department_id === department?.id);
+
+  return (
+    <Dialog open={department !== null} onOpenChange={onOpenChange}>
+      <DialogContent
+        data-testid="department-detail-dialog"
+        className="max-h-[90svh] overflow-y-auto sm:max-w-lg"
+      >
+        {department && (
+          <>
+            <DialogHeader>
+              <DialogTitle data-testid="department-detail-name">{department.name}</DialogTitle>
+              <DialogDescription>
+                {department.description || "No description."}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4">
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge variant={department.status === "active" ? "default" : "outline"}>
+                  {department.status}
+                </Badge>
+                <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
+                  {members.length} PIC(s)
+                </span>
+                <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
+                  {portalUsers.length} portal user(s)
+                </span>
+              </div>
+
+              <div className="grid gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  People in charge
+                </span>
+                {members.length === 0 ? (
+                  <p className="text-sm text-muted-foreground" data-testid="department-detail-no-pics">
+                    No PICs in this department yet.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1.5" data-testid="department-detail-pics">
+                    {members.map((pic) => (
+                      <div
+                        key={pic.id}
+                        className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5"
+                      >
+                        <PicBadge
+                          id={pic.id}
+                          name={pic.name}
+                          initials={pic.initials}
+                          onClick={openPic}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {pic.position || "—"}
+                        </span>
+                        <span className="ml-auto text-[11px] text-muted-foreground">
+                          {pic.applications.length} app(s) · {pic.servers.length} server(s) ·{" "}
+                          {pic.standby_schedule.length} shift(s)
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {portalUsers.length > 0 && (
+                <div className="grid gap-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Portal users (can edit this department's notes)
+                  </span>
+                  <div className="flex flex-wrap gap-1.5" data-testid="department-detail-users">
+                    {portalUsers.map((user) => (
+                      <span
+                        key={user.id}
+                        className="rounded-full border border-border bg-card px-2 py-0.5 text-[11px] text-foreground"
+                      >
+                        {user.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                data-testid="department-detail-edit-btn"
+                onClick={() => onEdit(department)}
+              >
+                <Pencil className="h-4 w-4" aria-hidden="true" /> Edit
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                data-testid="department-detail-close-btn"
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

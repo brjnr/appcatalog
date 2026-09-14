@@ -1,25 +1,16 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  AppWindow,
-  ContactRound,
-  NotebookPen,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Search,
-  ServerIcon,
-  Trash2,
-} from "lucide-react";
-import { apiDelete, apiErrorMessage, apiGet, apiPost } from "@/lib/api";
+import { NotebookPen, Pin, Plus, Search, Users } from "lucide-react";
+import { apiDelete, apiErrorMessage, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { InfraNavProvider, useInfraNav } from "@/lib/infraNav";
-import type { Note, NoteLinkOut, SessionUser } from "@/lib/types";
-import { slugify } from "@/lib/types";
+import type { Department, Note, SessionUser } from "@/lib/types";
+import { NOTE_SORTS, slugify } from "@/lib/types";
 import { AppNavbar } from "@/components/catalog/AppNavbar";
+import { NoteDetailDialog } from "@/components/catalog/NoteDetailDialog";
 import { NoteFormDialog } from "@/components/catalog/NoteFormDialog";
 import { PicDrawer } from "@/components/catalog/PicDrawer";
+import { SearchSelect } from "@/components/catalog/SearchSelect";
 import { ServerDrawer } from "@/components/catalog/ServerDrawer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -34,15 +25,19 @@ export default function NotesPage() {
   );
 }
 
-// Shared scratchpad: anyone signed in can post a temporary note about a server, alert,
-// or application. Only the author (or an admin) can edit or delete it.
+// Shared scratchpad: temporary notes about servers, alerts, or applications. A note can be
+// shared with everyone or with one department; the author, that department, and admins can
+// edit it. Pinned notes float to the top.
 function Notes() {
   const queryClient = useQueryClient();
   const { openServer, openPic } = useInfraNav();
   const [view, setView] = useState<"active" | "trash">("active");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("newest");
+  const [departmentFilter, setDepartmentFilter] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Note | null>(null);
+  const [detail, setDetail] = useState<Note | null>(null);
 
   const { data: user } = useQuery({
     queryKey: ["me"],
@@ -50,19 +45,32 @@ function Notes() {
     retry: false,
   });
 
-  const { data: notes, isLoading } = useQuery({
-    queryKey: ["notes", view],
-    queryFn: () => apiGet<Note[]>(`/notes?view=${view}`),
+  const { data: departments } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => apiGet<Department[]>("/departments"),
     enabled: Boolean(user),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["notes"] });
+  const { data: notes, isLoading } = useQuery({
+    queryKey: ["notes", view, sort, departmentFilter],
+    queryFn: () =>
+      apiGet<Note[]>(
+        `/notes?view=${view}&sort=${sort}${departmentFilter ? `&department_id=${departmentFilter}` : ""}`,
+      ),
+    enabled: Boolean(user),
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["notes"] });
+    queryClient.invalidateQueries({ queryKey: ["note-alerts"] });
+  };
 
   const remove = useMutation({
     mutationFn: (note: Note) => apiDelete<void>(`/notes/${note.id}`),
-    onSuccess: () => {
+    onSuccess: (_data, note) => {
       invalidate();
-      toast.success(view === "trash" ? "Note deleted for good" : "Note moved to Trash");
+      setDetail(null);
+      toast.success(note.status === "trashed" ? "Note deleted for good" : "Note moved to Trash");
     },
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
@@ -71,7 +79,18 @@ function Notes() {
     mutationFn: (note: Note) => apiPost<Note>(`/notes/${note.id}/restore`),
     onSuccess: () => {
       invalidate();
+      setDetail(null);
       toast.success("Note restored");
+    },
+    onError: (error) => toast.error(apiErrorMessage(error)),
+  });
+
+  const togglePin = useMutation({
+    mutationFn: (note: Note) => apiPatch<Note>(`/notes/${note.id}/pin`),
+    onSuccess: (saved) => {
+      invalidate();
+      setDetail(saved);
+      toast.success(saved.pinned ? "Pinned to the top" : "Unpinned");
     },
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
@@ -80,34 +99,6 @@ function Notes() {
   const filtered = (notes ?? []).filter((note) =>
     q ? `${note.title} ${note.body} ${note.author_name}`.toLowerCase().includes(q) : true,
   );
-
-  const linkIcon = (kind: string) =>
-    kind === "application" ? AppWindow : kind === "server" ? ServerIcon : ContactRound;
-
-  const renderLink = (note: Note, link: NoteLinkOut) => {
-    const Icon = linkIcon(link.kind);
-    const className =
-      "inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:border-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/40";
-    const testid = `note-link-${slugify(note.title)}-${link.kind}-${slugify(link.name)}`;
-    if (link.kind === "application") {
-      return (
-        <Link key={`${link.kind}-${link.id}`} to={`/app/${link.id}`} data-testid={testid} className={className}>
-          <Icon className="h-3 w-3" aria-hidden="true" /> {link.name}
-        </Link>
-      );
-    }
-    return (
-      <button
-        key={`${link.kind}-${link.id}`}
-        type="button"
-        data-testid={testid}
-        className={className}
-        onClick={() => (link.kind === "server" ? openServer(link.id) : openPic(link.id))}
-      >
-        <Icon className="h-3 w-3" aria-hidden="true" /> {link.name}
-      </button>
-    );
-  };
 
   return (
     <div className="min-h-svh">
@@ -120,9 +111,9 @@ function Notes() {
               Notes & Memos
             </h1>
             <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">
-              Temporary notes about servers, alerts, or applications. Everyone signed in can read
-              them; only the author or an administrator can change one. Expired notes move to Trash
-              and are purged 7 days later.
+              Temporary notes about servers, alerts, or applications. Share one with everyone or a
+              single department — the author, that department, and administrators can edit it.
+              Expired notes move to Trash and are purged 7 days later.
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -137,7 +128,7 @@ function Notes() {
                 data-testid="notes-search-input"
                 aria-label="Search notes"
                 placeholder="Search notes…"
-                className="h-9 w-48 pl-8"
+                className="h-9 w-44 pl-8"
               />
             </div>
             <Button
@@ -152,28 +143,53 @@ function Notes() {
           </div>
         </div>
 
-        <div className="mt-4 flex gap-1.5" role="tablist" aria-label="Notes view">
-          {(["active", "trash"] as const).map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={view === id}
-              data-testid={`notes-tab-${id}`}
-              onClick={() => setView(id)}
-              className={cn(
-                "rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors duration-150",
-                view === id
-                  ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                  : "border-border text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {id === "active" ? "Active notes" : "Deleted (7-day)"}
-            </button>
-          ))}
-          <span className="ml-1 self-center text-xs text-muted-foreground" data-testid="notes-count">
-            {isLoading ? "Loading…" : `${filtered.length} note(s)`}
-          </span>
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+          <div className="flex gap-1.5" role="tablist" aria-label="Notes view">
+            {(["active", "trash"] as const).map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={view === id}
+                data-testid={`notes-tab-${id}`}
+                onClick={() => setView(id)}
+                className={cn(
+                  "rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors duration-150",
+                  view === id
+                    ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                    : "border-border text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {id === "active" ? "Active notes" : "Deleted (7-day)"}
+              </button>
+            ))}
+          </div>
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <SearchSelect
+              testid="notes-department-filter"
+              value={departmentFilter}
+              onChange={setDepartmentFilter}
+              allLabel="All departments"
+              placeholder="Search departments…"
+              className="min-w-44"
+              options={(departments ?? []).map((department) => ({
+                id: department.id,
+                label: department.name,
+              }))}
+            />
+            <SearchSelect
+              testid="notes-sort"
+              value={sort}
+              onChange={(value) => setSort(value || "newest")}
+              placeholder="Search sorts…"
+              className="min-w-52"
+              options={NOTE_SORTS.map((option) => ({ id: option.id, label: option.label }))}
+            />
+            <span className="text-xs text-muted-foreground" data-testid="notes-count">
+              {isLoading ? "Loading…" : `${filtered.length} note(s)`}
+            </span>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2" data-testid="notes-list">
@@ -193,74 +209,72 @@ function Notes() {
               <Card
                 key={note.id}
                 data-testid={`note-card-${slugify(note.title)}`}
+                onClick={() => setDetail(note)}
                 className={cn(
-                  "flex flex-col gap-2 p-4 transition-[border-color,box-shadow] duration-150 hover:border-sky-300",
+                  "flex cursor-pointer flex-col gap-2 p-4 transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-sm",
+                  note.pinned && "border-amber-300 bg-amber-50/40 dark:bg-amber-950/10",
                   note.status === "trashed" && "border-dashed opacity-90",
                 )}
               >
                 <div className="flex items-start gap-2">
+                  {note.pinned && (
+                    <Pin
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500"
+                      aria-label="Pinned"
+                      data-testid={`note-pinned-${slugify(note.title)}`}
+                    />
+                  )}
                   <h2
                     className="min-w-0 flex-1 font-heading text-sm font-semibold text-foreground"
                     data-testid={`note-title-${slugify(note.title)}`}
                   >
                     {note.title}
                   </h2>
-                  {note.can_edit && (
-                    <div className="flex shrink-0 gap-1">
-                      {note.status === "trashed" ? (
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`Restore ${note.title}`}
-                          title="Restore note"
-                          data-testid={`note-restore-btn-${slugify(note.title)}`}
-                          onClick={() => restore.mutate(note)}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`Edit ${note.title}`}
-                          title="Edit note"
-                          data-testid={`note-edit-btn-${slugify(note.title)}`}
-                          onClick={() => {
-                            setEditing(note);
-                            setFormOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={`Delete ${note.title}`}
-                        title={note.status === "trashed" ? "Delete permanently" : "Move to Trash"}
-                        data-testid={`note-delete-btn-${slugify(note.title)}`}
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => remove.mutate(note)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                      </Button>
-                    </div>
+                  {note.status === "trashed" && note.can_edit && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      data-testid={`note-restore-btn-${slugify(note.title)}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        restore.mutate(note);
+                      }}
+                    >
+                      Restore
+                    </Button>
                   )}
                 </div>
 
                 {note.body && (
-                  <p className="whitespace-pre-line text-sm text-muted-foreground">{note.body}</p>
+                  <p className="line-clamp-3 whitespace-pre-line text-sm text-muted-foreground">
+                    {note.body}
+                  </p>
                 )}
 
                 {note.links_out.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    {note.links_out.map((link) => renderLink(note, link))}
+                    {note.links_out.map((link) => (
+                      <span
+                        key={`${link.kind}-${link.id}`}
+                        data-testid={`note-link-${slugify(note.title)}-${link.kind}-${slugify(link.name)}`}
+                        className="inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 text-[11px] font-medium text-foreground"
+                      >
+                        {link.name}
+                      </span>
+                    ))}
                   </div>
                 )}
 
                 <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-[11px] text-muted-foreground">
                   <span data-testid={`note-author-${slugify(note.title)}`}>
                     by <span className="font-medium text-foreground">{note.author_name}</span>
+                  </span>
+                  <span
+                    data-testid={`note-audience-${slugify(note.title)}`}
+                    className="inline-flex items-center gap-1"
+                  >
+                    <Users className="h-3 w-3" aria-hidden="true" />
+                    {note.department_name || "Everyone"}
                   </span>
                   <span className="font-mono">noted {note.note_date}</span>
                   {note.status === "trashed" ? (
@@ -290,6 +304,25 @@ function Notes() {
         </div>
       </main>
 
+      <NoteDetailDialog
+        note={detail}
+        onOpenChange={(open) => !open && setDetail(null)}
+        onEdit={(note) => {
+          setDetail(null);
+          setEditing(note);
+          setFormOpen(true);
+        }}
+        onTogglePin={(note) => togglePin.mutate(note)}
+        onDelete={(note) => remove.mutate(note)}
+        onOpenServer={(id) => {
+          setDetail(null);
+          openServer(id);
+        }}
+        onOpenPic={(id) => {
+          setDetail(null);
+          openPic(id);
+        }}
+      />
       <NoteFormDialog open={formOpen} onOpenChange={setFormOpen} initial={editing} />
       <ServerDrawer />
       <PicDrawer />

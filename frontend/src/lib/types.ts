@@ -35,6 +35,8 @@ export interface SessionUser {
   email: string;
   role: Role;
   assigned_category_ids: string[];
+  department_id: string;
+  department_name: string;
   is_active: boolean;
 }
 
@@ -243,6 +245,9 @@ export interface Note {
   body: string;
   author_id: string;
   author_name: string;
+  department_id: string;
+  department_name: string;
+  pinned: boolean;
   note_date: string;
   expires_at: string;
   status: string; // "active" | "trashed"
@@ -254,6 +259,40 @@ export interface Note {
   days_left: number;
   purge_on: string | null;
   can_edit: boolean;
+}
+
+// GET /api/notes/alerts — navbar badge for notes about an app/server expiring soon
+export interface NoteAlert {
+  id: string;
+  title: string;
+  expires_at: string;
+  days_left: number;
+  pinned: boolean;
+  targets: string[];
+}
+
+export interface NoteAlerts {
+  within_days: number;
+  count: number;
+  items: NoteAlert[];
+}
+
+export const NOTE_SORTS: { id: string; label: string }[] = [
+  { id: "newest", label: "Date: newest first" },
+  { id: "oldest", label: "Date: oldest first" },
+  { id: "expiring", label: "Expiring soonest" },
+  { id: "recently_updated", label: "Recently updated" },
+  { id: "title", label: "Title: A → Z" },
+];
+
+// POST /api/standby/rotate
+export interface StandbyRotateResult {
+  month: string;
+  department_name: string;
+  pics_used: number;
+  created: number;
+  skipped: number;
+  entries: StandbyCalendarEntry[];
 }
 
 export const NOTE_LINK_KINDS: { id: NoteLinkKind; label: string }[] = [

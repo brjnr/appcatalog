@@ -34,6 +34,8 @@ class Note(BaseModel):
     body: str = ""
     author_id: str
     author_name: str
+    department_id: str = ""  # "" = shared with everyone; otherwise only that department + admins
+    pinned: bool = False  # pinned notes sort to the top for the on-call team
     note_date: str  # the date the note is about / valid from (YYYY-MM-DD)
     expires_at: str  # retention date; after this the note moves to Trash
     status: NoteStatus = "active"
@@ -51,6 +53,7 @@ class Note(BaseModel):
 
 
 class NoteOut(Note):
+    department_name: str = ""  # "" = Everyone
     links_out: list[NoteLinkOut] = Field(default_factory=list)
     days_left: int = 0  # days until it moves to Trash (0 or less = due)
     purge_on: str | None = None  # date a trashed note is deleted for good
@@ -60,6 +63,8 @@ class NoteOut(Note):
 class NoteCreate(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     body: str = Field(default="", max_length=4000)
+    department_id: str = Field(default="", max_length=60)
+    pinned: bool = False
     note_date: str | None = Field(default=None, pattern=ISO_DATE)
     expires_at: str | None = Field(default=None, pattern=ISO_DATE)
     links: list[NoteLink] = Field(default_factory=list)
@@ -71,3 +76,5 @@ class NoteUpdate(BaseModel):
     note_date: str | None = Field(default=None, pattern=ISO_DATE)
     expires_at: str | None = Field(default=None, pattern=ISO_DATE)
     links: list[NoteLink] | None = None
+    department_id: str | None = Field(default=None, max_length=60)
+    pinned: bool | None = None
