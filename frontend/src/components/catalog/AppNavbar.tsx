@@ -1,0 +1,169 @@
+import { Link } from "react-router-dom";
+import { useTheme } from "next-themes";
+import { Building2, Moon, Plus, Search, Star, Sun } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { LayoutId } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { LayoutSelector } from "./LayoutSelector";
+
+interface AppNavbarProps {
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  favoritesOnly?: boolean;
+  onFavoritesToggle?: () => void;
+  layout?: LayoutId;
+  onLayoutChange?: (layout: LayoutId) => void;
+  onAddApp?: () => void;
+}
+
+// Fixed top bar: logo + title, quick search, favorites toggle, layout selector,
+// theme toggle, admin "Add App", user profile. Catalog controls only render on home.
+export function AppNavbar({
+  search,
+  onSearchChange,
+  favoritesOnly,
+  onFavoritesToggle,
+  layout,
+  onLayoutChange,
+  onAddApp,
+}: AppNavbarProps) {
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === "dark";
+
+  return (
+    <header
+      data-testid="app-navbar"
+      className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl dark:border-slate-800 dark:bg-[#0B0F17]/90"
+    >
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4 sm:gap-3 sm:px-6 lg:px-8">
+        <Link to="/" data-testid="app-logo-link" className="flex shrink-0 items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-600 text-white shadow-sm">
+            <Building2 className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="flex flex-col leading-none">
+            <span
+              data-testid="app-title"
+              className="font-heading text-[15px] font-semibold tracking-tight text-foreground"
+            >
+              Application Catalog
+            </span>
+            <span className="hidden text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground sm:block">
+              Enterprise Portal
+            </span>
+          </span>
+        </Link>
+
+        {search !== undefined && onSearchChange !== undefined && (
+          <div className="relative ml-3 hidden w-64 lg:block">
+            <Search
+              className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              data-testid="global-search-input"
+              aria-label="Search catalog"
+              placeholder="Search catalog…"
+              className="h-9 pl-8"
+            />
+          </div>
+        )}
+
+        <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
+          {onFavoritesToggle !== undefined && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onFavoritesToggle}
+              data-testid="favorites-filter-toggle"
+              title="Show favorites only"
+              aria-label="Show favorites only"
+              aria-pressed={favoritesOnly ?? false}
+              className={cn(
+                favoritesOnly
+                  ? "bg-amber-100 text-amber-600 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Star className={cn("h-4 w-4", favoritesOnly && "fill-current")} aria-hidden="true" />
+            </Button>
+          )}
+
+          {layout !== undefined && onLayoutChange !== undefined && (
+            <div className="hidden lg:block">
+              <LayoutSelector layout={layout} onChange={onLayoutChange} />
+            </div>
+          )}
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            data-testid="theme-toggle-btn"
+            aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+            title={isDark ? "Light theme" : "Dark theme"}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {isDark ? (
+              <Sun className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Moon className="h-4 w-4" aria-hidden="true" />
+            )}
+          </Button>
+
+          {onAddApp !== undefined && (
+            <Button
+              size="sm"
+              onClick={onAddApp}
+              data-testid="admin-add-app-btn"
+              className="hidden sm:inline-flex"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" /> Add App
+            </Button>
+          )}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  data-testid="user-profile-menu"
+                  aria-label="User profile"
+                  className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-white ring-offset-2 transition-[box-shadow] hover:ring-2 hover:ring-sky-400 dark:bg-sky-600"
+                >
+                  EU
+                </button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                <span className="block text-sm font-semibold">Enterprise User</span>
+                <span className="block text-xs font-normal text-muted-foreground">
+                  employee@corp.com
+                </span>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled>Profile & preferences</DropdownMenuItem>
+              <DropdownMenuItem disabled>Admin console</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                Signed in via company SSO. Favorites and layout preferences are saved on this
+                device.
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </header>
+  );
+}
