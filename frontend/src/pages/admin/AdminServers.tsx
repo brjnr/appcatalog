@@ -113,6 +113,7 @@ function AdminServers() {
             <TableRow>
               <TableHead>Server</TableHead>
               <TableHead>Environment</TableHead>
+              <TableHead>Site</TableHead>
               <TableHead>Applications</TableHead>
               <TableHead>PIC</TableHead>
               <TableHead>Status</TableHead>
@@ -122,13 +123,13 @@ function AdminServers() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   Loading servers…
                 </TableCell>
               </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   No servers match.
                 </TableCell>
               </TableRow>
@@ -151,6 +152,11 @@ function AdminServers() {
                       </div>
                     </TableCell>
                     <TableCell>{server.environment}</TableCell>
+                    <TableCell data-testid={`server-location-${slug}`}>
+                      <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:border-sky-900 dark:bg-sky-950/60 dark:text-sky-300">
+                        {server.location}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <div className="flex max-w-56 flex-wrap gap-1">
                         {server.applications.length === 0 ? (

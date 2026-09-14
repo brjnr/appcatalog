@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from pymongo import ReturnDocument
 
 from lib.auth import require_admin, require_user
@@ -46,6 +47,81 @@ async def _validate_links(app_ids: list[str] | None, pic_ids: list[str] | None) 
         found = await db.pics.count_documents({"id": {"$in": list(set(pic_ids))}})
         if found != len(set(pic_ids)):
             raise HTTPException(status_code=422, detail="one or more PICs do not exist")
+
+
+class MapNode(BaseModel):
+    id: str
+    name: str
+    kind: str  # "application" | "server"
+    meta: str = ""  # category for apps, location/environment for servers
+
+
+class MapEdge(BaseModel):
+    application_id: str
+    server_id: str
+
+
+class DependencyMap(BaseModel):
+    applications: list[MapNode]
+    servers: list[MapNode]
+    edges: list[MapEdge]
+    shared_server_ids: list[str]  # servers used by more than one application
+
+
+@router.get("/dependency-map", response_model=DependencyMap)
+async def dependency_map(user: dict = Depends(require_user)):
+    """Application ↔ server graph, scoped to what this user may see. Powers the visual
+    map of which applications share which servers."""
+    allowed = await visible_app_ids(user)
+    server_docs = await db.servers.find().sort("name", 1).to_list(2000)
+    servers = [s for s in server_docs if server_is_visible(s, allowed)]
+
+    app_ids: set[str] = set()
+    for s in servers:
+        for app_id in s.get("application_ids") or []:
+            if allowed is None or app_id in allowed:
+                app_ids.add(app_id)
+
+    app_docs = (
+        await db.apps.find({"id": {"$in": list(app_ids)}}).sort("name", 1).to_list(2000)
+        if app_ids
+        else []
+    )
+    cats = await db.categories.find({}, {"id": 1, "name": 1}).to_list(500)
+    cat_names = {c["id"]: c["name"] for c in cats}
+
+    edges: list[MapEdge] = []
+    for s in servers:
+        for app_id in s.get("application_ids") or []:
+            if app_id in app_ids:
+                edges.append(MapEdge(application_id=app_id, server_id=s["id"]))
+
+    return DependencyMap(
+        applications=[
+            MapNode(
+                id=a["id"],
+                name=a["name"],
+                kind="application",
+                meta=cat_names.get(a.get("category_id", ""), "Uncategorized"),
+            )
+            for a in app_docs
+        ],
+        servers=[
+            MapNode(
+                id=s["id"],
+                name=s["name"],
+                kind="server",
+                meta=f"{s.get('location', 'DC')} · {s.get('environment', '')}".strip(" ·"),
+            )
+            for s in servers
+        ],
+        edges=edges,
+        shared_server_ids=[
+            s["id"]
+            for s in servers
+            if len([a for a in (s.get("application_ids") or []) if a in app_ids]) > 1
+        ],
+    )
 
 
 @router.get("/servers", response_model=list[ServerOut])

@@ -132,6 +132,9 @@ export default function AdminDashboard() {
             <Link to="/admin/access" data-testid="quick-link-access" className="rounded-lg border px-3 py-2 transition-colors hover:bg-muted">
               Assign categories to users
             </Link>
+            <Link to="/admin/dependency-map" data-testid="quick-link-dependency-map" className="rounded-lg border px-3 py-2 transition-colors hover:bg-muted">
+              See which applications share servers
+            </Link>
             <Link to="/admin/applications" data-testid="quick-link-applications" className="rounded-lg border px-3 py-2 transition-colors hover:bg-muted">
               Register and manage applications
             </Link>

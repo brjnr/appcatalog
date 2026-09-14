@@ -4,9 +4,11 @@ import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from pymongo import ReturnDocument
 
 from lib.auth import require_admin, require_user
+from lib.dates import today_iso
 from lib.db import db
 from lib.visibility import app_name_map, pic_is_visible, visible_app_ids
 from models.infra import (
@@ -72,6 +74,62 @@ async def _sync_server_links(pic_id: str, server_ids: list[str]) -> None:
         await db.servers.update_many(
             {"id": {"$in": list(set(server_ids))}}, {"$addToSet": {"pic_ids": pic_id}}
         )
+
+
+class StandbyCalendarEntry(BaseModel):
+    """One standby shift flattened across all PICs, for the calendar view."""
+
+    date: str
+    pic_id: str
+    pic_name: str
+    pic_initials: str
+    application_id: str
+    application_name: str
+    notes: str = ""
+
+
+class StandbyCalendar(BaseModel):
+    month: str  # YYYY-MM
+    entries: list[StandbyCalendarEntry]
+
+
+@router.get("/standby", response_model=StandbyCalendar)
+async def standby_calendar(month: str | None = None, user: dict = Depends(require_user)):
+    """On-call roster for a month (defaults to the current month, server-anchored).
+    Scoped: a normal user only sees shifts for applications assigned to them."""
+    target = month or today_iso()[:7]
+    if len(target) != 7 or target[4] != "-":
+        raise HTTPException(status_code=422, detail="month must be formatted YYYY-MM")
+
+    allowed = await visible_app_ids(user)
+    docs = await db.pics.find().sort("name", 1).to_list(1000)
+    app_names = await app_name_map(
+        {e.get("application_id", "") for d in docs for e in (d.get("standby_schedule") or [])}
+    )
+
+    entries: list[StandbyCalendarEntry] = []
+    for pic in docs:
+        for entry in pic.get("standby_schedule") or []:
+            date = entry.get("date", "")
+            app_id = entry.get("application_id", "")
+            if not date.startswith(target):
+                continue
+            if allowed is not None and app_id not in allowed:
+                continue
+            entries.append(
+                StandbyCalendarEntry(
+                    date=date,
+                    pic_id=pic["id"],
+                    pic_name=pic["name"],
+                    pic_initials=pic.get("initials", ""),
+                    application_id=app_id,
+                    application_name=app_names.get(app_id, "—"),
+                    notes=entry.get("notes", ""),
+                )
+            )
+
+    entries.sort(key=lambda e: (e.date, e.pic_name))
+    return StandbyCalendar(month=target, entries=entries)
 
 
 @router.get("/pics", response_model=list[PicOut])

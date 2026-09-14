@@ -130,6 +130,7 @@ export interface Server {
   os_version: string;
   server_type: string;
   environment: string;
+  location: string;
   status: string;
   cpu: string;
   ram: string;
@@ -174,5 +175,46 @@ export const SERVER_ENVIRONMENTS = [
 ] as const;
 
 export const SERVER_STATUSES = ["Active", "Maintenance", "Decommissioned"] as const;
+
+/** Site role of a server: primary DC, disaster-recovery centre, cloud, or co-location. */
+export const SERVER_LOCATIONS = ["DC", "DRC", "Cloud", "Co-location"] as const;
+
+export const LOCATION_LABELS: Record<string, string> = {
+  DC: "DC — Data Center",
+  DRC: "DRC — Disaster Recovery",
+  Cloud: "Cloud",
+  "Co-location": "Co-location",
+};
+
+// Aggregated standby roster (GET /api/standby)
+export interface StandbyCalendarEntry {
+  date: string;
+  pic_id: string;
+  pic_name: string;
+  pic_initials: string;
+  application_id: string;
+  application_name: string;
+  notes: string;
+}
+
+export interface StandbyCalendar {
+  month: string;
+  entries: StandbyCalendarEntry[];
+}
+
+// Application <-> server graph (GET /api/dependency-map)
+export interface MapNode {
+  id: string;
+  name: string;
+  kind: string;
+  meta: string;
+}
+
+export interface DependencyMapData {
+  applications: MapNode[];
+  servers: MapNode[];
+  edges: { application_id: string; server_id: string }[];
+  shared_server_ids: string[];
+}
 
 export const PIC_STATUSES = ["Active", "Inactive"] as const;

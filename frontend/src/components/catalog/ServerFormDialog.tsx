@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiErrorMessage, apiGet, apiPost, apiPut } from "@/lib/api";
 import {
+  LOCATION_LABELS,
   SERVER_ENVIRONMENTS,
+  SERVER_LOCATIONS,
   SERVER_STATUSES,
   slugify,
   type CatalogApp,
@@ -62,6 +64,7 @@ export function ServerFormDialog({ open, onOpenChange, initial }: ServerFormDial
     () => Object.fromEntries(FIELDS.map((f) => [f.key, ""])) as Record<TextKey, string>,
   );
   const [environment, setEnvironment] = useState("Production");
+  const [location, setLocation] = useState("DC");
   const [status, setStatus] = useState("Active");
   const [description, setDescription] = useState("");
   const [appIds, setAppIds] = useState<string[]>([]);
@@ -87,6 +90,7 @@ export function ServerFormDialog({ open, onOpenChange, initial }: ServerFormDial
       ) as Record<TextKey, string>,
     );
     setEnvironment(initial?.environment ?? "Production");
+    setLocation(initial?.location ?? "DC");
     setStatus(initial?.status ?? "Active");
     setDescription(initial?.description ?? "");
     setAppIds(initial?.application_ids ?? []);
@@ -117,6 +121,7 @@ export function ServerFormDialog({ open, onOpenChange, initial }: ServerFormDial
       name: name.trim(),
       ...text,
       environment,
+      location,
       status,
       description: description.trim(),
       application_ids: appIds,
@@ -179,6 +184,22 @@ export function ServerFormDialog({ open, onOpenChange, initial }: ServerFormDial
                   {SERVER_ENVIRONMENTS.map((env) => (
                     <SelectItem key={env} value={env}>
                       {env}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="server-form-location">Site role / location</Label>
+              <Select value={location} onValueChange={setLocation}>
+                <SelectTrigger id="server-form-location" data-testid="server-form-location-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SERVER_LOCATIONS.map((loc) => (
+                    <SelectItem key={loc} value={loc}>
+                      {LOCATION_LABELS[loc] ?? loc}
                     </SelectItem>
                   ))}
                 </SelectContent>

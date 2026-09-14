@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Cpu, HardDrive, MemoryStick, ServerIcon, ShieldBan } from "lucide-react";
 import { ApiError, apiGet } from "@/lib/api";
 import { useInfraNav } from "@/lib/infraNav";
-import { slugify, type Server } from "@/lib/types";
+import { LOCATION_LABELS, slugify, type Server } from "@/lib/types";
 import { DetailRow, InfraStatusBadge } from "./InfraBits";
 import { PicBadge } from "./PicBadge";
 import {
@@ -82,6 +82,12 @@ export function ServerDrawer() {
               <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                 {server.environment}
               </span>
+              <span
+                data-testid="server-location-chip"
+                className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:border-sky-900 dark:bg-sky-950/60 dark:text-sky-300"
+              >
+                {server.location}
+              </span>
               {server.server_type && (
                 <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                   {server.server_type}
@@ -125,6 +131,7 @@ export function ServerDrawer() {
               <DetailRow label="Operating system" value={server.os} />
               <DetailRow label="OS version" value={server.os_version} />
               <DetailRow label="Data center / location" value={server.datacenter} testid="server-detail-datacenter" />
+              <DetailRow label="Site role" value={LOCATION_LABELS[server.location] ?? server.location} testid="server-detail-location" />
               <DetailRow label="Cluster" value={server.cluster} />
               <DetailRow label="Virtualization platform" value={server.virtualization} />
               <DetailRow label="Server type" value={server.server_type} />

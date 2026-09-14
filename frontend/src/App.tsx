@@ -12,6 +12,8 @@ import AdminApplications from "@/pages/admin/AdminApplications";
 import AdminServers from "@/pages/admin/AdminServers";
 import AdminPics from "@/pages/admin/AdminPics";
 import AdminAccess from "@/pages/admin/AdminAccess";
+import AdminDependencyMap from "@/pages/admin/AdminDependencyMap";
+import StandbyCalendar from "@/pages/StandbyCalendar";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -21,6 +23,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/app/:id" element={<AppDetail />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/standby" element={<StandbyCalendar />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboard />} />
           <Route path="users" element={<AdminUsers />} />
@@ -30,6 +33,7 @@ export default function App() {
           <Route path="servers" element={<AdminServers />} />
           <Route path="pics" element={<AdminPics />} />
           <Route path="access" element={<AdminAccess />} />
+          <Route path="dependency-map" element={<AdminDependencyMap />} />
         </Route>
       </Routes>
       <Toaster />

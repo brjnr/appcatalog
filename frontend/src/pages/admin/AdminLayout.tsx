@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Outlet, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AppWindow, ContactRound, KeyRound, LayoutGrid, ServerIcon, ShieldBan, ShieldCheck, Shapes, Users } from "lucide-react";
+import { AppWindow, ContactRound, KeyRound, LayoutGrid, Network, ServerIcon, ShieldBan, ShieldCheck, Shapes, Users } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import type { SessionUser } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/types";
@@ -18,6 +18,7 @@ const MENUS = [
   { to: "/admin/servers", label: "Servers", icon: ServerIcon, end: false, testid: "admin-nav-servers" },
   { to: "/admin/pics", label: "PIC Management", icon: ContactRound, end: false, testid: "admin-nav-pics" },
   { to: "/admin/access", label: "Access Management", icon: KeyRound, end: false, testid: "admin-nav-access" },
+  { to: "/admin/dependency-map", label: "Dependency Map", icon: Network, end: false, testid: "admin-nav-dependency-map" },
 ];
 
 // Admin console shell: guards the whole subtree — login required, administrator role required.

@@ -98,6 +98,19 @@ sessions/users/categories/apps/servers/pics first). `STG-TEST-01` is intentional
 application and no PIC to exercise standalone registration. Credentials in
 `memory/test_credentials.md`.
 
+## Standby calendar, infra search, dependency map, server location
+- `Server.location`: `Literal["DC","DRC","Cloud","Co-location"]` (default `DC`) — editable in the
+  admin server form, shown as a chip + "Site Role" line in `ServerDrawer`, and searchable.
+- `GET /api/standby?month=YYYY-MM` — all PIC on-call shifts for a month
+  (`{month, entries:[{date, pic_id, pic_name, pic_initials, application_id, application_name, notes}]}`).
+  Scoped for normal users (only shifts on apps they may access). Page: `/standby` (any logged-in user),
+  month grid + agenda, PIC badges open `PicDrawer`.
+- `GET /api/dependency-map` — `{applications[], servers[], edges[], shared_server_ids[]}`; servers used
+  by >1 app are flagged shared. Page: `/admin/dependency-map` (admin), numeric-viewBox SVG connectors
+  (never percentages in `path d`).
+- Main catalog search also queries infra: `InfraSearchResults` lists matching servers (name/hostname/
+  IP/location) and PICs (name/initials) and opens the corresponding drawer.
+
 ## Notes
 - base-ui gotchas hit here: `Menu.Item` fires **onClick** (not `onSelect`), and
   `DropdownMenuLabel` (GroupLabel) requires `Menu.Group` context — use a plain div instead.

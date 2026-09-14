@@ -7,6 +7,8 @@ from typing import Literal
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 ServerStatus = Literal["Active", "Maintenance", "Decommissioned"]
+# Site role: primary data center, disaster-recovery center, cloud, or co-location.
+ServerLocation = Literal["DC", "DRC", "Cloud", "Co-location"]
 ServerEnvironment = Literal["Production", "Staging", "Development", "DR", "Internal"]
 PicStatus = Literal["Active", "Inactive"]
 
@@ -44,6 +46,7 @@ class Server(BaseModel):
     os_version: str = ""
     server_type: str = ""
     environment: ServerEnvironment = "Production"
+    location: ServerLocation = "DC"
     status: ServerStatus = "Active"
     cpu: str = ""
     ram: str = ""
@@ -82,6 +85,7 @@ class ServerCreate(BaseModel):
     os_version: str = Field(default="", max_length=60)
     server_type: str = Field(default="", max_length=60)
     environment: ServerEnvironment = "Production"
+    location: ServerLocation = "DC"
     status: ServerStatus = "Active"
     cpu: str = Field(default="", max_length=60)
     ram: str = Field(default="", max_length=60)
@@ -103,6 +107,7 @@ class ServerUpdate(BaseModel):
     os_version: str | None = Field(default=None, max_length=60)
     server_type: str | None = Field(default=None, max_length=60)
     environment: ServerEnvironment | None = None
+    location: ServerLocation | None = None
     status: ServerStatus | None = None
     cpu: str | None = Field(default=None, max_length=60)
     ram: str | None = Field(default=None, max_length=60)

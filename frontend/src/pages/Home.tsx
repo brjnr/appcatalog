@@ -22,9 +22,22 @@ import { AppCardCompact } from "@/components/catalog/AppCardCompact";
 import { AlphabeticalView } from "@/components/catalog/AlphabeticalView";
 import { CategoryView } from "@/components/catalog/CategoryView";
 import { AppFormDialog } from "@/components/catalog/AppFormDialog";
+import { InfraSearchResults } from "@/components/catalog/InfraSearchResults";
+import { ServerDrawer } from "@/components/catalog/ServerDrawer";
+import { PicDrawer } from "@/components/catalog/PicDrawer";
+import { InfraNavProvider } from "@/lib/infraNav";
 import { Button } from "@/components/ui/button";
 
-export default function Home() {
+// Infra search results and their drawers read ?server= / ?pic= from the URL.
+export default function HomePage() {
+  return (
+    <InfraNavProvider>
+      <Home />
+    </InfraNavProvider>
+  );
+}
+
+function Home() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -194,6 +207,8 @@ export default function Home() {
           onClearFilters={clearFilters}
         />
 
+        <InfraSearchResults search={search} />
+
         {isLoading ? (
           <div
             className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
@@ -275,6 +290,8 @@ export default function Home() {
       </main>
 
       <AppFormDialog open={formOpen} onOpenChange={setFormOpen} initial={null} />
+      <ServerDrawer />
+      <PicDrawer />
     </div>
   );
 }
