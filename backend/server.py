@@ -9,18 +9,14 @@ import bcrypt
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from lib.auth import (
-    SESSION_COOKIE,
-    create_session,
-    delete_session,
-    get_current_user,
-    get_session_cookie_options,
-    require_admin,
-    session_digest,
-)
+try:
+    from .lib.auth import SESSION_COOKIE, create_session, delete_session, get_current_user, get_session_cookie_options, require_admin, session_digest
+except ImportError:
+    from lib.auth import SESSION_COOKIE, create_session, delete_session, get_current_user, get_session_cookie_options, require_admin, session_digest
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -35,8 +31,18 @@ db = client[os.environ["DB_NAME"]]
 app = FastAPI(title="AppCatalog API", docs_url=None, redoc_url=None)
 app.state.db = db
 
-cors_origins = [item.strip() for item in os.environ.get("CORS_ORIGINS", "").split(",") if item.strip() and item.strip() != "*"]
-trusted_hosts = [item.strip() for item in os.environ.get("TRUSTED_HOSTS", "localhost,127.0.0.1").split(",") if item.strip()]
+configured_cors = [item.strip() for item in os.environ.get("CORS_ORIGINS", "").split(",") if item.strip()]
+if "*" in configured_cors:
+    if os.environ.get("APP_ENV", "development").lower() == "production":
+        raise RuntimeError("CORS_ORIGINS must be an explicit origin list in production")
+    cors_origins = ["http://localhost:3000", "https://sast-review.preview.emergentagent.com"]
+else:
+    cors_origins = configured_cors
+configured_hosts = [item.strip() for item in os.environ.get("TRUSTED_HOSTS", "").split(",") if item.strip()]
+if not configured_hosts and os.environ.get("APP_ENV", "development").lower() == "production":
+    raise RuntimeError("TRUSTED_HOSTS must contain at least one host in production")
+trusted_hosts = configured_hosts or ["*"]
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -89,8 +95,20 @@ async def startup() -> None:
 async def security_middleware(request: Request, call_next):
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > 1_048_576:
-            return Response("Request too large", status_code=413)
+        try:
+            if content_length and int(content_length) > 1_048_576:
+                return Response("Request too large", status_code=413)
+        except (TypeError, ValueError):
+            return Response("Invalid content length", status_code=400)
+        if not content_length:
+            chunks = []
+            total = 0
+            async for chunk in request.stream():
+                total += len(chunk)
+                if total > 1_048_576:
+                    return Response("Request too large", status_code=413)
+                chunks.append(chunk)
+            request._body = b"".join(chunks)
         if request.url.path != "/api/auth/login":
             origin = request.headers.get("origin")
             if origin and origin not in cors_origins:
