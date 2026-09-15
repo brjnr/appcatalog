@@ -35,7 +35,11 @@ configured_cors = [item.strip() for item in os.environ.get("CORS_ORIGINS", "").s
 if "*" in configured_cors:
     if os.environ.get("APP_ENV", "development").lower() == "production":
         raise RuntimeError("CORS_ORIGINS must be an explicit origin list in production")
-    cors_origins = ["http://localhost:3000", "https://sast-review.preview.emergentagent.com"]
+    cors_origins = [
+        "http://localhost:3000",
+        "https://sast-review.preview.emergentagent.com",
+        "https://app-portal-199.preview.emergentagent.com",
+    ]
 else:
     cors_origins = configured_cors
 configured_hosts = [item.strip() for item in os.environ.get("TRUSTED_HOSTS", "").split(",") if item.strip()]

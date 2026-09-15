@@ -1,1 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="5" time="1.631" timestamp="2026-09-15T20:17:27.648006+00:00" hostname="agent-env-e0050385-241b-4165-a962-04828a316904"><testcase classname="tests.test_security_baseline" name="test_status_requires_authentication" time="0.338" /><testcase classname="tests.test_security_baseline" name="test_status_post_requires_authentication" time="0.068" /><testcase classname="tests.test_security_baseline" name="test_api_security_headers_and_cors_are_explicit" time="0.061" /><testcase classname="tests.test_security_baseline" name="test_oversized_state_changing_request_is_rejected" time="0.175" /><testcase classname="tests.test_security_baseline" name="test_invalid_login_is_generic_and_throttled" time="0.449" /></testsuite></testsuites>
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="5" time="1.920" timestamp="2026-09-15T20:20:53.470682+00:00" hostname="agent-env-e0050385-241b-4165-a962-04828a316904"><testcase classname="tests.test_security_baseline" name="test_status_requires_authentication" time="0.275" /><testcase classname="tests.test_security_baseline" name="test_status_post_requires_authentication" time="0.114" /><testcase classname="tests.test_security_baseline" name="test_api_security_headers_and_cors_are_explicit" time="0.111" /><testcase classname="tests.test_security_baseline" name="test_oversized_state_changing_request_is_rejected" time="0.259" /><testcase classname="tests.test_security_baseline" name="test_invalid_login_is_generic_and_throttled" time="0.613"><failure message="AssertionError: assert [429, 429, 429, 429, 429] == [401, 401, 401, 401, 401]&#10;  &#10;  At index 0 diff: 429 != 401&#10;  &#10;  Full diff:&#10;    [&#10;  -     401,&#10;  ?      ^^...&#10;  &#10;  ...Full output truncated (19 lines hidden), use '-vv' to show">backend/tests/test_security_baseline.py:51: in test_invalid_login_is_generic_and_throttled
+    assert statuses[:5] == [401] * 5
+E   AssertionError: assert [429, 429, 429, 429, 429] == [401, 401, 401, 401, 401]
+E     
+E     At index 0 diff: 429 != 401
+E     
+E     Full diff:
+E       [
+E     -     401,
+E     ?      ^^...
+E     
+E     ...Full output truncated (19 lines hidden), use '-vv' to show</failure></testcase></testsuite></testsuites>

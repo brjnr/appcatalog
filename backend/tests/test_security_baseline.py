@@ -1,5 +1,6 @@
 """Regression checks for public security controls and unauthenticated access."""
 import os
+import uuid
 
 import pytest
 import requests
@@ -46,7 +47,7 @@ def test_oversized_state_changing_request_is_rejected(api):
 
 
 def test_invalid_login_is_generic_and_throttled(api):
-    payload = {"email": "TEST_missing@example.com", "password": "not-a-real-password"}
+    payload = {"email": f"test-missing-{uuid.uuid4().hex}@example.com", "password": "not-a-real-password"}
     statuses = [api.post(f"{BASE_URL}/api/auth/login", json=payload).status_code for _ in range(6)]
     assert statuses[:5] == [401] * 5
     assert statuses[5] == 429
