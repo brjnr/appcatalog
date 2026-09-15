@@ -42,3 +42,30 @@ See `/app/memory/test_credentials.md`. Login accepts email or username.
 - CSRF token for cookie-authed state-changing requests (explicitly deferred per user).
 - SAST tooling in CI (Semgrep, pip-audit, yarn audit, secret scan) — recommended next.
 - Migrate frontend favorites away from `localStorage` toward the new `/api/apps/me/favorites` endpoint so favorite state syncs across devices.
+
+## 2026-02 features (Phase A + B + C)
+
+### Phase A — Server lifecycle fields
+- Added `date_created` (manual input), `date_decommissioned`, and `decommission_notes` to `models/infra.py` `Server` / `ServerCreate` / `ServerUpdate`.
+- `ServerFormDialog` renders `date_created` on every server, plus conditional `date_decommissioned` + `decommission_notes` when status is `Decommissioned`.
+- `ServerDrawer` view shows both lifecycle dates and the decommission notes block for retired servers.
+
+### Phase B — Import / Export
+- New router `routers/import_export.py`:
+  - `GET /api/exports/{entity}/template` — empty `.xlsx` with headers + example row + How-to-fill sheet + (where relevant) a Categories/Departments reference sheet.
+  - `GET /api/exports/{entity}` — live dump of every row for edit-and-reupload workflow.
+  - `POST /api/imports/{entity}` — accepts `.xlsx`/`.csv`/`.tsv`; parses entirely in memory (never touches disk), hard cap 3 MB and 1000 rows, closes the `UploadFile` before returning.
+  - Row outcomes are returned as `created` / `updated` / `skipped` / `error` with a Pydantic-generated message.
+- New admin page `AdminImportExport` with 4 cards (Categories, Applications, Servers, PICs) — Template, Export live data, Upload buttons, and a rich per-row result table.
+- `openpyxl==3.1.5` added to requirements.
+
+### Phase C — Integrations tab
+- New router `routers/integrations.py` with CRUD per connector kind (`jira`, `smtp`, `teams`, `telegram`, `vcenter`); one row per kind in a new `integrations` collection (unique index on `kind`).
+- New utility `lib/crypto.py`: symmetric Fernet encryption for secret fields, with a `INTEGRATIONS_KEY` env var and a masked hint on read (`•••ken`). Blank secret input on update keeps the existing encrypted value so admins do not have to retype passwords.
+- Live delivery wired for SMTP: `POST /api/integrations/email/test` (send test email) and `POST /api/integrations/alerts/notes-expiring` (send a digest of expiring notes to a supplied recipient list). Both use `smtplib` with `asyncio.to_thread`.
+- Other connectors (Jira, Teams, Telegram, vCenter) ship the config UI + save; live delivery hooks arrive in a later phase.
+- New admin page `AdminIntegrations` with a card grid + edit dialog + "Send test email" dialog.
+
+### Nav / routing
+- `AdminLayout` gains "Import / Export" and "Integrations" menu entries.
+- `App.tsx` registers `/admin/import-export` and `/admin/integrations` routes.
