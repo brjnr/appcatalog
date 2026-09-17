@@ -74,3 +74,11 @@ See `/app/memory/test_credentials.md`. Login accepts email or username.
 - Renamed active MongoDB database `appcatalog_demo` → `appcatalog_prod` via mongodump/mongorestore (`--nsFrom/--nsTo`), preserving all 11 collections and counts (users 8, apps 36, categories 9, servers 14, pics 6, integrations 1, favorites 1, sessions 88, departments 5).
 - Updated `DB_NAME="appcatalog_prod"` in `backend/.env`; backend restarts cleanly and serves identical data (verified: login 200, 9 categories, 36 apps).
 - Old `appcatalog_demo` database dropped after verification.
+
+### v1.0 docs + deployment kit (June 2026)
+- `README.md` rewritten from the `farm-ts` template boilerplate into the real AppCatalog v1.0 doc: feature/stack overview, one-command Docker deploy, manual VM deploy (systemd + nginx), local dev, full env-var table, DB seed/backup/restore/rename commands, troubleshooting table.
+- New `deploy/` kit: `docker-compose.yml` (mongo + backend + nginx-served frontend, named volumes for DB and uploads), `Dockerfile.backend`, `Dockerfile.frontend` (multi-stage yarn build → nginx), `nginx.docker.conf`, `nginx.conf` (bare-metal), `.env.example`.
+- `.gitignore`: added negations so `*.env.example` templates are tracked (they were silently ignored by `.env.*`).
+- `frontend/package.json` version bumped `0.0.0` → `1.0.0`.
+- Verified: compose YAML parses, example env files no longer git-ignored, running app unaffected (frontend 200, `/api/categories` 401 unauth as expected).
+- Note: Docker is unavailable in the pod, so the image builds were not executed here.
