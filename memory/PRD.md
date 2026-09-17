@@ -69,3 +69,8 @@ See `/app/memory/test_credentials.md`. Login accepts email or username.
 ### Nav / routing
 - `AdminLayout` gains "Import / Export" and "Integrations" menu entries.
 - `App.tsx` registers `/admin/import-export` and `/admin/integrations` routes.
+
+### Database rename (June 2026)
+- Renamed active MongoDB database `appcatalog_demo` → `appcatalog_prod` via mongodump/mongorestore (`--nsFrom/--nsTo`), preserving all 11 collections and counts (users 8, apps 36, categories 9, servers 14, pics 6, integrations 1, favorites 1, sessions 88, departments 5).
+- Updated `DB_NAME="appcatalog_prod"` in `backend/.env`; backend restarts cleanly and serves identical data (verified: login 200, 9 categories, 36 apps).
+- Old `appcatalog_demo` database dropped after verification.
